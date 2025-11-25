@@ -1,0 +1,35 @@
+{
+  "name": "chatbot-liquid-glass",
+  "version": "1.0.0",
+  "description": "A beautiful, production-ready chatbot widget with Apple liquid glass design (glassmorphism) for The Digital PO Box",
+  "main": "chatbot-liquid-glass.js",
+  "scripts": {
+    "test": "node local-server.js"
+  },
+  "keywords": [
+    "chatbot",
+    "widget",
+    "glassmorphism",
+    "liquid-glass",
+    "n8n",
+    "webhook",
+    "customer-support",
+    "chat"
+  ],
+  "author": "The Digital PO Box",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YOUR_USERNAME/chatbot-liquid-glass.git"
+  },
+  "bugs": {
+    "url": "https://github.com/YOUR_USERNAME/chatbot-liquid-glass/issues"
+  },
+  "homepage": "https://github.com/YOUR_USERNAME/chatbot-liquid-glass#readme",
+  "files": [
+    "chatbot-liquid-glass.js",
+    "README.md",
+    "LICENSE"
+  ]
+}
+
