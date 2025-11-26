@@ -24,7 +24,8 @@
         highlightColor: '#FF6A3D',
         backgroundColor: '#F4F4F6',
         showBadge: true,
-        soundsEnabled: true  // Enable/disable sound effects
+        soundsEnabled: true,  // Enable/disable sound effects
+        watermarkImageUrl: 'https://raw.githubusercontent.com/alzeenia/chatbot-liquid-glass/main/brandAssets/tdpbLogo.png'  // TDPB Logo watermark image URL
     };
 
     class ChatbotLiquidGlass {
@@ -260,6 +261,20 @@
                     box-shadow: 0 4px 12px rgba(0, 183, 176, 0.3),
                                 inset 0 1px 0 rgba(255, 255, 255, 0.2);
                     border: 1px solid rgba(255, 255, 255, 0.2);
+                    position: relative;
+                    overflow: hidden;
+                }
+                
+                .chatbot-lg-watermark {
+                    position: absolute;
+                    bottom: 2px;
+                    right: 2px;
+                    width: 16px;
+                    height: 16px;
+                    object-fit: contain;
+                    opacity: 0.9;
+                    z-index: 1;
+                    pointer-events: none;
                 }
                 
                 .chatbot-lg-title {
@@ -631,6 +646,10 @@
             // Widget
             const widget = document.createElement('div');
             widget.id = 'chatbot-lg-widget';
+            // Build watermark image HTML if URL is provided
+            const watermarkHtml = this.config.watermarkImageUrl ? 
+                `<img src="${this.config.watermarkImageUrl}" alt="AI Watermark" class="chatbot-lg-watermark" />` : '';
+            
             widget.innerHTML = `
                 <div class="chatbot-lg-header">
                     <div class="chatbot-lg-header-content">
@@ -638,6 +657,7 @@
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                 <path d="M20 2H4C2.9 2 2 2.9 2 4V22L6 18H20C21.1 18 22 17.1 22 16V4C22 2.9 21.1 2 20 2Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                             </svg>
+                            ${watermarkHtml}
                         </div>
                         <div>
                             <div class="chatbot-lg-title">${this.config.title}</div>
@@ -892,6 +912,16 @@
             try {
                 this.addTypingIndicator();
                 
+                // Validate required fields
+                if (!data.step) {
+                    throw new Error('Request missing required field: step');
+                }
+                
+                // Ensure session_id is always included (even if empty)
+                if (data.session_id === undefined) {
+                    data.session_id = this.state.session_id || '';
+                }
+                
                 const response = await fetch(this.config.webhookUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -908,7 +938,14 @@
                 const text = await response.text();
                 if (!text) throw new Error('Empty response from server');
                 
-                return JSON.parse(text);
+                let parsedResponse;
+                try {
+                    parsedResponse = JSON.parse(text);
+                } catch (parseError) {
+                    throw new Error(`Invalid JSON response: ${parseError.message}`);
+                }
+                
+                return parsedResponse;
             } catch (error) {
                 this.removeTypingIndicator();
                 
@@ -927,10 +964,23 @@
                               `• Access-Control-Allow-Origin: *\n` +
                               `• Access-Control-Allow-Methods: POST, OPTIONS\n` +
                               `• Access-Control-Allow-Headers: Content-Type`;
+                } else if (error.message.includes('Invalid JSON')) {
+                    errorMsg = `❌ Invalid Response: ${error.message}\n\n` +
+                              `The server returned invalid JSON. Please check the backend response format.`;
                 }
                 
                 console.error('Chatbot Error:', error);
+                console.error('Request that failed:', data);
                 this.addMessage(errorMsg, true);
+                
+                // Re-enable input if it was enabled before error
+                const input = document.getElementById('chatbot-lg-input');
+                if (input && !input.disabled) {
+                    // Input was enabled, keep it enabled after error
+                    const sendBtn = document.getElementById('chatbot-lg-send');
+                    if (sendBtn) sendBtn.disabled = !input.value.trim();
+                }
+                
                 return null;
             }
         }
@@ -952,18 +1002,30 @@
                 session_id: ''  // Backend will generate session_id when blank
             });
 
-            if (response) this.handleResponse(response);
+            if (response) {
+                this.handleResponse(response);
+            } else {
+                // If request failed, show error and allow retry
+                this.footerDiv.innerHTML = `
+                    <button class="chatbot-lg-start-btn" id="chatbot-lg-start">Retry</button>
+                `;
+                this.widget.querySelector('#chatbot-lg-start').addEventListener('click', () => this.startChat());
+            }
         }
 
         async handleOptionClick(option) {
+            // Disable all option buttons to prevent double-clicking
             document.querySelectorAll('.chatbot-lg-option-btn').forEach(btn => btn.disabled = true);
+            
+            // Add user message
             this.addMessage(option.option_value, false);
-            // Sound already played in addOptions click handler
+            
+            // Play sound for option selection
+            this.playSound('option');
 
             let requestData = {};
 
             if (this.state.currentStep === 'send_user_types') {
-                // Step 2: Send concern categories request
                 requestData = {
                     step: 'send_concern_categories',
                     user_type: option.id,
@@ -995,40 +1057,24 @@
                 }
             }
             else if (this.state.currentStep === 'send_top_questions') {
-                const isSomethingElse = option.id === 'something_else' || 
-                                      option.id.includes('something_else') ||
-                                      option.option_value.toLowerCase().includes('something else');
-                
-                if (isSomethingElse) {
-                    requestData = {
-                        step: 'send_top_questions',
-                        user_type: this.state.user_type,
-                        concern_category: 'something_else',
-                        session_id: this.state.session_id || ''
-                    };
-                    this.state.concern_category = 'something_else';
-                } else {
-                    requestData = {
-                        step: 'send_query_answer',
-                        user_type: this.state.user_type,
-                        concern_category: this.state.concern_category,
-                        question: option.option_value,
-                        session_id: this.state.session_id || ''
-                    };
-                    this.state.question = option.option_value;
-                    this.state.currentStep = 'send_query_answer';
-                }
+                // Step 4: User clicked a top question OR "something_else" in top_questions
+                // Both cases should send send_query_answer
+                requestData = {
+                    step: 'send_query_answer',
+                    user_type: this.state.user_type,
+                    concern_category: this.state.concern_category,
+                    question: option.option_value,
+                    session_id: this.state.session_id || ''
+                };
+                this.state.question = option.option_value;
+                this.state.currentStep = 'send_query_answer';
             }
             else if (this.state.currentStep === 'answer') {
                 if (option.id === 'ask_another') {
-                    this.state.concern_category = '';
-                    this.state.question = '';
-                    requestData = {
-                        step: 'send_concern_categories',
-                        user_type: this.state.user_type,
-                        session_id: this.state.session_id || ''
-                    };
-                    this.state.currentStep = 'send_concern_categories';
+                    // Ask another question: Enable text input for follow-up question
+                    // User will type new question, which will send send_query_answer again
+                    this.enableTextInput();
+                    return; // Don't send request, just enable input
                 } else if (option.id === 'talk_to_human') {
                     this.addMessage('👤 Redirecting to human support...\n\nPlease contact us at:\n📧 support@thedigitalpobox.com', true);
                     
@@ -1057,9 +1103,11 @@
             if (!question) return;
 
             input.disabled = true;
-            document.getElementById('chatbot-lg-send').disabled = true;
+            const sendBtn = document.getElementById('chatbot-lg-send');
+            if (sendBtn) sendBtn.disabled = true;
 
             this.addMessage(question, false);
+            this.playSound('send');
 
             const response = await this.sendRequest({
                 step: 'send_query_answer',
@@ -1069,7 +1117,17 @@
                 session_id: this.state.session_id || ''
             });
 
-            if (response) this.handleResponse(response);
+            if (response) {
+                // Clear input and re-enable for follow-up questions
+                input.value = '';
+                input.disabled = false;
+                if (sendBtn) sendBtn.disabled = true; // Disabled until user types
+                this.handleResponse(response);
+            } else {
+                // Re-enable input on error
+                input.disabled = false;
+                if (sendBtn) sendBtn.disabled = !input.value.trim();
+            }
         }
 
         handleResponse(response) {
@@ -1084,12 +1142,18 @@
                 this.state.currentStep = stepMapping[response.step] || response.step;
             }
 
+            // If response has an answer, we're in the answer step
+            if (response.answer) {
+                this.state.currentStep = 'answer';
+            }
+
             if (response.message) this.addMessage(response.message, true);
             if (response.answer) this.addMessage(response.answer, true);
 
             const shouldEnableInput = response.text_input_enabled || 
                                     (this.state.currentStep === 'send_top_questions' && 
-                                     this.state.concern_category === 'something_else');
+                                     this.state.concern_category === 'something_else') ||
+                                    (this.state.currentStep === 'answer' && response.text_input_enabled);
 
             if (shouldEnableInput) {
                 this.enableTextInput();
