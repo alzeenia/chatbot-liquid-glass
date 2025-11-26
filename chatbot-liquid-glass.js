@@ -900,15 +900,37 @@
 
                 this.removeTypingIndicator();
 
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
+                }
                 
                 const text = await response.text();
-                if (!text) throw new Error('Empty response');
+                if (!text) throw new Error('Empty response from server');
                 
                 return JSON.parse(text);
             } catch (error) {
                 this.removeTypingIndicator();
-                this.addMessage(`❌ Error: ${error.message}`, true);
+                
+                // Better error messages
+                let errorMsg = error.message;
+                if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+                    errorMsg = `❌ Connection Error: ${error.message}\n\n` +
+                              `Possible causes:\n` +
+                              `• CORS not enabled on server\n` +
+                              `• Network connectivity issue\n` +
+                              `• Webhook URL incorrect\n\n` +
+                              `Check browser console (F12) for details.`;
+                } else if (error.message.includes('CORS')) {
+                    errorMsg = `❌ CORS Error: ${error.message}\n\n` +
+                              `Make sure your n8n webhook has these headers:\n` +
+                              `• Access-Control-Allow-Origin: *\n` +
+                              `• Access-Control-Allow-Methods: POST, OPTIONS\n` +
+                              `• Access-Control-Allow-Headers: Content-Type`;
+                }
+                
+                console.error('Chatbot Error:', error);
+                this.addMessage(errorMsg, true);
                 return null;
             }
         }
@@ -916,6 +938,7 @@
         async startChat() {
             this.footerDiv.innerHTML = '<div style="text-align: center; color: rgba(0, 61, 70, 0.6); padding: 8px; font-size: 13px;">Loading...</div>';
             
+            // Step 1: Send blank session_id - backend will generate it
             this.state = {
                 currentStep: 'send_user_types',
                 session_id: '',
@@ -926,7 +949,7 @@
 
             const response = await this.sendRequest({
                 step: 'send_user_types',
-                session_id: ''
+                session_id: ''  // Backend will generate session_id when blank
             });
 
             if (response) this.handleResponse(response);
@@ -940,6 +963,7 @@
             let requestData = {};
 
             if (this.state.currentStep === 'send_user_types') {
+                // Step 2: Send concern categories request
                 requestData = {
                     step: 'send_concern_categories',
                     user_type: option.id,
