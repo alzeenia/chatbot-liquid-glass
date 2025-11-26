@@ -917,10 +917,47 @@
                     throw new Error('Request missing required field: step');
                 }
                 
-                // Ensure session_id is always included (even if empty)
+                // For Step 1 (send_user_types), only send step and session_id
+                if (data.step === 'send_user_types') {
+                    const requestBody = {
+                        step: 'send_user_types',
+                        session_id: ''  // Always blank for Step 1
+                    };
+                    
+                    console.log('📤 Step 1 Request:', JSON.stringify(requestBody, null, 2));
+                    
+                    const response = await fetch(this.config.webhookUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(requestBody)
+                    });
+                    
+                    this.removeTypingIndicator();
+
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
+                    }
+                    
+                    const text = await response.text();
+                    if (!text) throw new Error('Empty response from server');
+                    
+                    let parsedResponse;
+                    try {
+                        parsedResponse = JSON.parse(text);
+                    } catch (parseError) {
+                        throw new Error(`Invalid JSON response: ${parseError.message}`);
+                    }
+                    
+                    return parsedResponse;
+                }
+                
+                // For other steps, ensure session_id is included
                 if (data.session_id === undefined) {
                     data.session_id = this.state.session_id || '';
                 }
+                
+                console.log('📤 Request:', JSON.stringify(data, null, 2));
                 
                 const response = await fetch(this.config.webhookUrl, {
                     method: 'POST',
