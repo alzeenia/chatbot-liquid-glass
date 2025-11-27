@@ -149,6 +149,7 @@
                     z-index: 999999;
                 }
                 
+                
                 /* Toggle Button - Glass Effect */
                 #chatbot-lg-toggle {
                     width: 60px;
@@ -615,6 +616,132 @@
                     30% {
                         transform: translateY(-8px);
                         opacity: 1;
+                    }
+                }
+                
+                /* Mobile Responsive Styles - Standard Chatbot Practices */
+                @media (max-width: 768px) {
+                    #chatbot-lg-widget {
+                        width: calc(100vw - 32px);
+                        max-width: 420px;
+                        height: calc(100vh - 120px);
+                        max-height: 600px;
+                        min-height: 500px;
+                        border-radius: 20px;
+                        margin: 60px 16px 16px 16px;
+                    }
+                    
+                    #chatbot-lg-toggle {
+                        width: 56px;
+                        height: 56px;
+                        bottom: 20px;
+                        right: 20px;
+                    }
+                    
+                    .chatbot-lg-header {
+                        padding: 16px 18px;
+                    }
+                    
+                    .chatbot-lg-title {
+                        font-size: 15px;
+                    }
+                    
+                    .chatbot-lg-subtitle {
+                        font-size: 11px;
+                    }
+                    
+                    .chatbot-lg-messages {
+                        padding: 16px;
+                    }
+                    
+                    .chatbot-lg-message-bubble {
+                        max-width: 85%;
+                        font-size: 14px;
+                        padding: 12px 16px;
+                    }
+                    
+                    .chatbot-lg-options {
+                        margin-left: 0;
+                        max-width: 100%;
+                        gap: 8px;
+                    }
+                    
+                    .chatbot-lg-option-btn {
+                        padding: 10px 14px;
+                        font-size: 13px;
+                        min-height: 40px;
+                    }
+                    
+                    .chatbot-lg-footer {
+                        padding: 16px 18px;
+                    }
+                    
+                    .chatbot-lg-input {
+                        padding: 12px 16px;
+                        font-size: 15px; /* Prevents zoom on iOS */
+                    }
+                    
+                    .chatbot-lg-send-btn {
+                        width: 44px;
+                        height: 44px;
+                    }
+                    
+                    .chatbot-lg-start-btn {
+                        padding: 14px 24px;
+                        font-size: 16px;
+                    }
+                }
+                
+                /* Small mobile devices (iPhone SE, etc.) */
+                @media (max-width: 428px) {
+                    #chatbot-lg-widget {
+                        width: calc(100vw - 24px);
+                        max-width: 100%;
+                        height: calc(100vh - 100px);
+                        max-height: 580px;
+                        min-height: 480px;
+                        margin: 50px 12px 12px 12px;
+                        border-radius: 18px;
+                    }
+                    
+                    .chatbot-lg-header {
+                        padding: 14px 16px;
+                    }
+                    
+                    .chatbot-lg-messages {
+                        padding: 14px;
+                    }
+                    
+                    .chatbot-lg-message-bubble {
+                        max-width: 88%;
+                        font-size: 14px;
+                    }
+                    
+                    .chatbot-lg-options {
+                        grid-template-columns: 1fr;
+                        gap: 8px;
+                    }
+                    
+                    .chatbot-lg-option-btn {
+                        width: 100%;
+                        padding: 12px 16px;
+                    }
+                    
+                    .chatbot-lg-footer {
+                        padding: 14px 16px;
+                    }
+                }
+                
+                /* Landscape mobile */
+                @media (max-width: 768px) and (orientation: landscape) {
+                    #chatbot-lg-widget {
+                        height: calc(100vh - 80px);
+                        max-height: 500px;
+                        min-height: 400px;
+                    }
+                    
+                    .chatbot-lg-messages {
+                        padding: 12px;
                     }
                 }
             `;
@@ -1108,23 +1235,26 @@
             }
             else if (this.state.currentStep === 'answer') {
                 if (option.id === 'ask_another') {
-                    // Ask another question: Enable text input for follow-up question
-                    // User will type new question, which will send send_query_answer again
-                    this.enableTextInput();
-                    return; // Don't send request, just enable input
+                    // Ask another question: Send concern categories request to start new flow
+                    requestData = {
+                        step: 'send_concern_categories',
+                        user_type: this.state.user_type,
+                        session_id: this.state.session_id || ''
+                    };
+                    // Reset concern_category and question for new flow
+                    this.state.concern_category = '';
+                    this.state.question = '';
+                    this.state.currentStep = 'send_concern_categories';
                 } else if (option.id === 'talk_to_human') {
-                    this.addMessage('👤 Redirecting to human support...\n\nPlease contact us at:\n📧 support@thedigitalpobox.com', true);
-                    
-                    // Show reset button
-                    setTimeout(() => {
-                        this.footerDiv.innerHTML = `
-                            <button class="chatbot-lg-start-btn" id="chatbot-lg-reset" style="background: linear-gradient(135deg, rgba(0, 61, 70, 0.9), rgba(0, 183, 176, 0.9));">
-                                Start Over
-                            </button>
-                        `;
-                        this.widget.querySelector('#chatbot-lg-reset').addEventListener('click', () => this.resetChat());
-                    }, 500);
-                    return;
+                    // Send talk_to_human_instructions request to backend
+                    requestData = {
+                        step: 'talk_to_human_instructions',
+                        user_type: this.state.user_type,
+                        concern_category: this.state.concern_category || '',
+                        question: this.state.question || '',
+                        session_id: this.state.session_id || ''
+                    };
+                    this.state.currentStep = 'talk_to_human_instructions';
                 }
             }
 
