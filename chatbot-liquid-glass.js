@@ -2405,8 +2405,9 @@
                 
                 // Process italic inside link text: *text* -> <em>text</em>
                 // Only process single asterisks/underscores that aren't part of bold
-                processedText = processedText.replace(/(?<!\*)\*([^*\n]+?)\*(?!\*)/g, '<em>$1</em>');
-                processedText = processedText.replace(/(?<!_)_([^_\n]+?)_(?!_)/g, '<em>$1</em>');
+                // Browser-compatible: Use word boundary and negative lookahead instead of lookbehind
+                processedText = processedText.replace(/(^|[^*])\*([^*\n]+?)\*(?!\*)/g, '$1<em>$2</em>');
+                processedText = processedText.replace(/(^|[^_])_([^_\n]+?)_(?!_)/g, '$1<em>$2</em>');
                 
                 // Escape URL to prevent XSS
                 const div2 = document.createElement('div');
@@ -2446,8 +2447,9 @@
             
             // Italic: *text* or _text_ (only if not already bold)
             // Process single asterisks/underscores that aren't part of bold
-            html = html.replace(/(?<!\*)\*([^*\n]+?)\*(?!\*)/g, '<em>$1</em>');
-            html = html.replace(/(?<!_)_([^_\n]+?)_(?!_)/g, '<em>$1</em>');
+            // Browser-compatible: Use word boundary and negative lookahead instead of lookbehind
+            html = html.replace(/(^|[^*])\*([^*\n]+?)\*(?!\*)/g, '$1<em>$2</em>');
+            html = html.replace(/(^|[^_])_([^_\n]+?)_(?!_)/g, '$1<em>$2</em>');
             
             return html;
         }
