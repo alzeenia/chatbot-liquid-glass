@@ -18,7 +18,7 @@
  *   ChatbotLiquidGlass.init({
  *     webhookUrl: 'YOUR_WEBHOOK_URL',
  *     position: 'bottom-right',
- *     title: 'Genie Support',
+ *     title: 'AI Support',
  *     subtitle: 'The Digital PO Box'
  *   });
  * </script>
@@ -33,7 +33,7 @@
      */
     const defaults = {
         position: 'bottom-right',        // Widget position: 'bottom-right', 'bottom-left', 'top-right', 'top-left'
-        title: 'Genie Support',          // Header title displayed in the chatbot widget
+        title: 'AI Support',          // Header title displayed in the chatbot widget
         subtitle: 'The Digital PO Box',  // Subtitle displayed below the title
         primaryColor: '#003D46',         // Primary brand color (dark teal)
         accentColor: '#00B7B0',          // Accent color (light teal)
@@ -60,7 +60,7 @@
          * @param {Object} config - Configuration object
          * @param {string} config.webhookUrl - Required: Backend webhook URL for API communication
          * @param {string} [config.position='bottom-right'] - Widget position on screen
-         * @param {string} [config.title='Genie Support'] - Header title
+         * @param {string} [config.title='AI Support'] - Header title
          * @param {string} [config.subtitle='The Digital PO Box'] - Header subtitle
          * @param {boolean} [config.soundsEnabled=true] - Enable/disable sound effects
          * @param {boolean} [config.showBadge=true] - Show notification badge
@@ -519,6 +519,9 @@
                     font-size: 24px;
                     transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
                     border: 1px solid rgba(255, 255, 255, 0.18);
+                    /* Safe area insets for notched devices */
+                    bottom: env(safe-area-inset-bottom, 20px);
+                    right: env(safe-area-inset-right, 20px);
                 }
                 
                 #chatbot-lg-toggle:hover {
@@ -603,17 +606,28 @@
                     width: 40px;
                     height: 40px;
                     border-radius: 50%;
-                    background: rgba(0, 183, 176, 0.9);
+                    background: #F4F4F6;
                     backdrop-filter: blur(10px);
                     -webkit-backdrop-filter: blur(10px);
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    box-shadow: 0 4px 12px rgba(0, 183, 176, 0.3),
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1),
                                 inset 0 1px 0 rgba(255, 255, 255, 0.2);
                     border: 1px solid rgba(255, 255, 255, 0.2);
                     position: relative;
                     overflow: hidden;
+                }
+                
+                .chatbot-lg-avatar img,
+                .chatbot-lg-avatar svg {
+                    width: 32px;
+                    height: 32px;
+                    object-fit: contain;
+                }
+                
+                .chatbot-lg-avatar img {
+                    /* No filter - show original colors */
                 }
                 
                 .chatbot-lg-title {
@@ -638,7 +652,8 @@
                 }
                 
                 .chatbot-lg-expand,
-                .chatbot-lg-close {
+                .chatbot-lg-close,
+                .chatbot-lg-human-support {
                     width: 32px;
                     height: 32px;
                     border-radius: 50%;
@@ -656,12 +671,18 @@
                     line-height: 1;
                     padding: 0;
                     margin: 0;
+                    position: relative;
                 }
                 
                 .chatbot-lg-expand:hover,
-                .chatbot-lg-close:hover {
+                .chatbot-lg-close:hover,
+                .chatbot-lg-human-support:hover {
                     background: rgba(255, 255, 255, 0.2);
                     transform: scale(1.1);
+                }
+                
+                .chatbot-lg-human-support {
+                    font-size: 20px;
                 }
                 
                 .chatbot-lg-expand svg,
@@ -739,14 +760,14 @@
                 }
                 
                 .chatbot-lg-message-avatar {
-                    width: 28px;
-                    height: 28px;
+                    width: 32px;
+                    height: 32px;
                     border-radius: 50%;
                     display: flex;
                     align-items: center;
                     justify-content: center;
                     flex-shrink: 0;
-                    font-size: 12px;
+                    font-size: 16px;
                     backdrop-filter: blur(10px);
                     -webkit-backdrop-filter: blur(10px);
                     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1),
@@ -845,9 +866,10 @@
                 }
                 
                 .chatbot-lg-message-bubble a {
-                    color: #00B7B0;
+                    color: #00B7B0 !important;
                     text-decoration: underline;
-                    word-break: break-all;
+                    word-break: break-word;
+                    overflow-wrap: break-word;
                     cursor: pointer;
                     pointer-events: auto;
                     position: relative;
@@ -1031,6 +1053,64 @@
                                 inset 0 1px 0 rgba(255, 255, 255, 0.4);
                 }
                 
+                /* Starting Disclaimer Banner Styles */
+                .chatbot-lg-starting-disclaimer {
+                    background: #F4F4F6;
+                    backdrop-filter: blur(10px);
+                    -webkit-backdrop-filter: blur(10px);
+                    border-left: 4px solid #FF6A3D;
+                    padding: 12px 16px;
+                    margin: 0;
+                    font-size: 13px;
+                    line-height: 1.6;
+                    color: #003D46;
+                    border-radius: 0;
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                }
+                
+                .chatbot-lg-starting-disclaimer a {
+                    color: #00B7B0 !important;
+                    text-decoration: underline !important;
+                    font-weight: 700 !important;
+                    word-break: break-word;
+                    overflow-wrap: break-word;
+                    cursor: pointer !important;
+                }
+                
+                .chatbot-lg-starting-disclaimer a strong {
+                    font-weight: 700 !important;
+                    color: #00B7B0 !important;
+                }
+                
+                .chatbot-lg-starting-disclaimer a:hover {
+                    color: #003D46 !important;
+                    text-decoration: underline !important;
+                }
+                
+                .chatbot-lg-starting-disclaimer a:hover strong {
+                    color: #003D46 !important;
+                }
+                
+                .chatbot-disclaimer-link {
+                    color: #00B7B0 !important;
+                    text-decoration: underline !important;
+                    font-weight: 700 !important;
+                    cursor: pointer !important;
+                }
+                
+                .chatbot-disclaimer-link strong {
+                    font-weight: 700 !important;
+                    color: inherit !important;
+                }
+                
+                @media (max-width: 768px) {
+                    .chatbot-lg-starting-disclaimer {
+                        font-size: 12px;
+                        padding: 10px 14px;
+                    }
+                }
+                
                 .typing-indicator {
                     display: flex;
                     gap: 5px;
@@ -1068,24 +1148,35 @@
                 /* Mobile Responsive Styles - Standard Chatbot Practices */
                 @media (max-width: 768px) {
                     #chatbot-lg-widget {
-                        width: calc(100vw - 32px);
+                        width: calc(100vw - 24px);
                         max-width: 420px;
-                        height: calc(100vh - 120px);
+                        height: calc(100vh - 100px);
                         max-height: 600px;
                         min-height: 500px;
                         border-radius: 20px;
-                        margin: 60px 16px 16px 16px;
+                        margin: 50px 12px 12px 12px;
                     }
                     
                     #chatbot-lg-toggle {
                         width: 56px;
                         height: 56px;
-                        bottom: 20px;
-                        right: 20px;
+                        bottom: 16px;
+                        right: 16px;
+                        font-size: 24px;
                     }
                     
                     .chatbot-lg-header {
-                        padding: 16px 18px;
+                        padding: 14px 16px;
+                    }
+                    
+                    .chatbot-lg-avatar {
+                        width: 44px;
+                        height: 44px;
+                    }
+                    
+                    .chatbot-lg-avatar svg {
+                        width: 28px;
+                        height: 28px;
                     }
                     
                     .chatbot-lg-title {
@@ -1096,14 +1187,39 @@
                         font-size: 11px;
                     }
                     
+                    .chatbot-lg-header-actions {
+                        gap: 6px;
+                    }
+                    
+                    .chatbot-lg-expand,
+                    .chatbot-lg-close,
+                    .chatbot-lg-human-support {
+                        width: 36px;
+                        height: 36px;
+                        font-size: 18px;
+                    }
+                    
+                    .chatbot-lg-expand svg,
+                    .chatbot-lg-close svg {
+                        width: 14px;
+                        height: 14px;
+                    }
+                    
                     .chatbot-lg-messages {
-                        padding: 16px;
+                        padding: 14px;
+                    }
+                    
+                    .chatbot-lg-message-avatar {
+                        width: 28px;
+                        height: 28px;
+                        font-size: 14px;
                     }
                     
                     .chatbot-lg-message-bubble {
                         max-width: 85%;
                         font-size: 14px;
                         padding: 12px 16px;
+                        line-height: 1.5;
                     }
                     
                     .chatbot-lg-options {
@@ -1113,54 +1229,123 @@
                     }
                     
                     .chatbot-lg-option-btn {
-                        padding: 10px 14px;
-                        font-size: 13px;
-                        min-height: 40px;
+                        padding: 12px 16px;
+                        font-size: 14px;
+                        min-height: 44px; /* iOS touch target minimum */
                     }
                     
                     .chatbot-lg-footer {
-                        padding: 16px 18px;
+                        padding: 14px 16px;
                     }
                     
                     .chatbot-lg-input {
                         padding: 12px 16px;
-                        font-size: 15px; /* Prevents zoom on iOS */
+                        font-size: 16px; /* Prevents zoom on iOS */
+                        min-height: 44px; /* iOS touch target minimum */
                     }
                     
                     .chatbot-lg-send-btn {
                         width: 44px;
                         height: 44px;
+                        min-width: 44px; /* iOS touch target minimum */
                     }
                     
                     .chatbot-lg-start-btn {
                         padding: 14px 24px;
                         font-size: 16px;
+                        min-height: 44px; /* iOS touch target minimum */
+                    }
+                    
+                    .chatbot-lg-rating-container {
+                        padding: 14px;
+                    }
+                    
+                    .chatbot-lg-star {
+                        font-size: 22px;
+                    }
+                    
+                    .chatbot-lg-feedback-option {
+                        padding: 12px 14px;
+                        font-size: 14px;
+                        min-height: 44px; /* iOS touch target minimum */
                     }
                 }
                 
-                /* Small mobile devices (iPhone SE, etc.) */
+                /* Small mobile devices (iPhone SE, iPhone 12/13 mini, etc.) */
                 @media (max-width: 428px) {
                     #chatbot-lg-widget {
-                        width: calc(100vw - 24px);
+                        width: calc(100vw - 16px);
                         max-width: 100%;
-                        height: calc(100vh - 100px);
+                        height: calc(100vh - 80px);
                         max-height: 580px;
-                        min-height: 480px;
-                        margin: 50px 12px 12px 12px;
+                        min-height: 450px;
+                        margin: 40px 8px 8px 8px;
                         border-radius: 18px;
                     }
                     
+                    #chatbot-lg-toggle {
+                        width: 52px;
+                        height: 52px;
+                        bottom: 12px;
+                        right: 12px;
+                        font-size: 22px;
+                    }
+                    
                     .chatbot-lg-header {
-                        padding: 14px 16px;
+                        padding: 12px 14px;
+                    }
+                    
+                    .chatbot-lg-avatar {
+                        width: 40px;
+                        height: 40px;
+                    }
+                    
+                    .chatbot-lg-avatar svg {
+                        width: 26px;
+                        height: 26px;
+                    }
+                    
+                    .chatbot-lg-title {
+                        font-size: 14px;
+                    }
+                    
+                    .chatbot-lg-subtitle {
+                        font-size: 10px;
+                    }
+                    
+                    .chatbot-lg-header-actions {
+                        gap: 4px;
+                    }
+                    
+                    .chatbot-lg-expand,
+                    .chatbot-lg-close,
+                    .chatbot-lg-human-support {
+                        width: 32px;
+                        height: 32px;
+                        font-size: 16px;
+                    }
+                    
+                    .chatbot-lg-expand svg,
+                    .chatbot-lg-close svg {
+                        width: 12px;
+                        height: 12px;
                     }
                     
                     .chatbot-lg-messages {
-                        padding: 14px;
+                        padding: 12px;
+                    }
+                    
+                    .chatbot-lg-message-avatar {
+                        width: 26px;
+                        height: 26px;
+                        font-size: 13px;
                     }
                     
                     .chatbot-lg-message-bubble {
                         max-width: 88%;
-                        font-size: 14px;
+                        font-size: 13px;
+                        padding: 10px 14px;
+                        line-height: 1.5;
                     }
                     
                     .chatbot-lg-options {
@@ -1170,24 +1355,205 @@
                     
                     .chatbot-lg-option-btn {
                         width: 100%;
-                        padding: 12px 16px;
+                        padding: 12px 14px;
+                        font-size: 13px;
+                        min-height: 44px;
                     }
                     
                     .chatbot-lg-footer {
-                        padding: 14px 16px;
+                        padding: 12px 14px;
+                    }
+                    
+                    .chatbot-lg-input {
+                        padding: 10px 14px;
+                        font-size: 16px;
+                        min-height: 44px;
+                    }
+                    
+                    .chatbot-lg-send-btn {
+                        width: 44px;
+                        height: 44px;
+                    }
+                    
+                    .chatbot-lg-start-btn {
+                        padding: 12px 20px;
+                        font-size: 15px;
+                        min-height: 44px;
+                    }
+                    
+                    .chatbot-lg-rating-container {
+                        padding: 12px;
+                    }
+                    
+                    .chatbot-lg-rating-label {
+                        font-size: 12px;
+                    }
+                    
+                    .chatbot-lg-star {
+                        font-size: 20px;
+                    }
+                    
+                    .chatbot-lg-feedback-option {
+                        padding: 10px 12px;
+                        font-size: 13px;
+                        min-height: 44px;
                     }
                 }
                 
                 /* Landscape mobile */
                 @media (max-width: 768px) and (orientation: landscape) {
                     #chatbot-lg-widget {
-                        height: calc(100vh - 80px);
+                        width: calc(100vw - 24px);
+                        height: calc(100vh - 60px);
                         max-height: 500px;
                         min-height: 400px;
+                        margin: 30px 12px 12px 12px;
+                    }
+                    
+                    .chatbot-lg-header {
+                        padding: 12px 16px;
+                    }
+                    
+                    .chatbot-lg-avatar {
+                        width: 40px;
+                        height: 40px;
+                    }
+                    
+                    .chatbot-lg-avatar svg {
+                        width: 26px;
+                        height: 26px;
+                    }
+                    
+                    .chatbot-lg-title {
+                        font-size: 14px;
+                    }
+                    
+                    .chatbot-lg-subtitle {
+                        font-size: 10px;
                     }
                     
                     .chatbot-lg-messages {
                         padding: 12px;
+                    }
+                    
+                    .chatbot-lg-message-avatar {
+                        width: 26px;
+                        height: 26px;
+                        font-size: 13px;
+                    }
+                    
+                    .chatbot-lg-message-bubble {
+                        font-size: 13px;
+                        padding: 10px 14px;
+                    }
+                    
+                    .chatbot-lg-footer {
+                        padding: 12px 16px;
+                    }
+                    
+                    .chatbot-lg-rating-container {
+                        padding: 12px;
+                    }
+                }
+                
+                /* Extra small devices (iPhone SE 1st gen, very small Android) */
+                @media (max-width: 375px) {
+                    #chatbot-lg-widget {
+                        width: calc(100vw - 12px);
+                        margin: 30px 6px 6px 6px;
+                        border-radius: 16px;
+                        min-height: 400px;
+                    }
+                    
+                    #chatbot-lg-toggle {
+                        bottom: max(12px, env(safe-area-inset-bottom, 12px));
+                        right: max(12px, env(safe-area-inset-right, 12px));
+                    }
+                    
+                    .chatbot-lg-header {
+                        padding: 10px 12px;
+                        padding-top: max(10px, env(safe-area-inset-top, 10px));
+                    }
+                    
+                    .chatbot-lg-avatar {
+                        width: 36px;
+                        height: 36px;
+                    }
+                    
+                    .chatbot-lg-avatar svg {
+                        width: 24px;
+                        height: 24px;
+                    }
+                    
+                    .chatbot-lg-title {
+                        font-size: 13px;
+                    }
+                    
+                    .chatbot-lg-subtitle {
+                        font-size: 9px;
+                    }
+                    
+                    .chatbot-lg-expand,
+                    .chatbot-lg-close,
+                    .chatbot-lg-human-support {
+                        width: 32px;
+                        height: 32px;
+                        font-size: 14px;
+                        min-width: 32px;
+                    }
+                    
+                    .chatbot-lg-messages {
+                        padding: 10px;
+                    }
+                    
+                    .chatbot-lg-message-avatar {
+                        width: 24px;
+                        height: 24px;
+                        font-size: 12px;
+                    }
+                    
+                    .chatbot-lg-message-bubble {
+                        font-size: 12px;
+                        padding: 9px 12px;
+                    }
+                    
+                    .chatbot-lg-footer {
+                        padding: 10px 12px;
+                        padding-bottom: max(10px, env(safe-area-inset-bottom, 10px));
+                    }
+                    
+                    .chatbot-lg-option-btn {
+                        font-size: 12px;
+                        padding: 10px 12px;
+                        min-height: 44px; /* Maintain iOS touch target */
+                    }
+                    
+                    .chatbot-lg-input {
+                        font-size: 16px;
+                        padding: 10px 12px;
+                        min-height: 44px; /* Maintain iOS touch target */
+                    }
+                    
+                    .chatbot-lg-send-btn {
+                        min-width: 44px; /* Maintain iOS touch target */
+                    }
+                }
+                
+                /* Safe area support for notched devices (iPhone X and newer) */
+                @supports (padding: max(0px)) {
+                    @media (max-width: 768px) {
+                        #chatbot-lg-widget {
+                            margin-top: max(50px, env(safe-area-inset-top, 50px));
+                            margin-bottom: max(12px, env(safe-area-inset-bottom, 12px));
+                        }
+                        
+                        .chatbot-lg-header {
+                            padding-top: max(14px, env(safe-area-inset-top, 14px));
+                        }
+                        
+                        .chatbot-lg-footer {
+                            padding-bottom: max(14px, env(safe-area-inset-bottom, 14px));
+                        }
                     }
                 }
                 
@@ -1444,8 +1810,9 @@
             widget.innerHTML = `
                 <div class="chatbot-lg-header">
                     <div class="chatbot-lg-header-content">
-                        <div class="chatbot-lg-avatar">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <div class="chatbot-lg-avatar" id="chatbot-lg-header-avatar">
+                            <img id="chatbot-lg-avatar-img" src="chatbot_assets/chatbot-logo.png" alt="Chatbot Logo" style="display: none;">
+                            <svg id="chatbot-lg-avatar-fallback" width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display: block;">
                                 <path d="M20 2H4C2.9 2 2 2.9 2 4V22L6 18H20C21.1 18 22 17.1 22 16V4C22 2.9 21.1 2 20 2Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                             </svg>
                         </div>
@@ -1455,6 +1822,9 @@
                         </div>
                     </div>
                     <div class="chatbot-lg-header-actions">
+                        <button class="chatbot-lg-human-support" id="chatbot-lg-human-support" title="Get Human Support">
+                            👤
+                        </button>
                         <button class="chatbot-lg-expand" id="chatbot-lg-expand" title="Expand to fullscreen">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                 <path d="M8 3H5C3.89543 3 3 3.89543 3 5V8M21 8V5C21 3.89543 20.1046 3 19 3H16M16 21H19C20.1046 21 21 20.1046 21 19V16M3 16V19C3 20.1046 3.89543 21 5 21H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1516,7 +1886,54 @@
             this.toggle.addEventListener('click', () => this.open());
             this.widget.querySelector('#chatbot-lg-close').addEventListener('click', () => this.close());
             this.widget.querySelector('#chatbot-lg-expand').addEventListener('click', () => this.toggleExpand());
+            this.widget.querySelector('#chatbot-lg-human-support').addEventListener('click', () => {
+                window.open('https://www.thedigitalpobox.com/en/contact/', '_blank');
+            });
             this.widget.querySelector('#chatbot-lg-start').addEventListener('click', () => this.startChat());
+            
+            // Load custom avatar image with fallback
+            this.loadHeaderAvatar();
+        }
+        
+        /**
+         * Loads the custom header avatar image from chatbot_assets folder
+         * Falls back to default SVG if image is not found
+         */
+        loadHeaderAvatar() {
+            const avatarImg = this.widget.querySelector('#chatbot-lg-avatar-img');
+            const avatarFallback = this.widget.querySelector('#chatbot-lg-avatar-fallback');
+            
+            if (!avatarImg || !avatarFallback) return;
+            
+            // Try to load the custom image
+            avatarImg.onload = () => {
+                // Image loaded successfully
+                avatarImg.style.display = 'block';
+                avatarFallback.style.display = 'none';
+            };
+            
+            avatarImg.onerror = () => {
+                // Image failed to load, use fallback SVG
+                avatarImg.style.display = 'none';
+                avatarFallback.style.display = 'block';
+            };
+            
+            // Trigger load check (if already cached, onload won't fire)
+            if (avatarImg.complete) {
+                if (avatarImg.naturalWidth === 0) {
+                    // Image failed to load
+                    avatarImg.style.display = 'none';
+                    avatarFallback.style.display = 'block';
+                } else {
+                    // Image loaded successfully
+                    avatarImg.style.display = 'block';
+                    avatarFallback.style.display = 'none';
+                }
+            } else {
+                // Image is still loading, show fallback initially
+                avatarImg.style.display = 'none';
+                avatarFallback.style.display = 'block';
+            }
         }
 
         // ====================================================================
@@ -1531,7 +1948,7 @@
          * Also hides the notification badge if it was showing.
          * Automatically restores cached conversation if available.
          */
-        open() {
+        async open() {
             this.widget.style.display = 'flex';
             this.toggle.style.display = 'none';
             this.isOpen = true;
@@ -1571,6 +1988,134 @@
                 
                 // Scroll to bottom to show latest messages
                 this.scrollToBottom();
+            } else if (this.messagesDiv.children.length === 0) {
+                // Widget is empty - fetch starting disclaimer from backend
+                await this.fetchStartingDisclaimer();
+            }
+        }
+        
+        /**
+         * Fetches the starting disclaimer from the backend
+         * 
+         * Calls the backend with step "send_ai_starting_disclaimer" and displays
+         * the disclaimer message at the top of the chat window if received.
+         */
+        async fetchStartingDisclaimer() {
+            try {
+                // For send_ai_starting_disclaimer step, ALWAYS send blank session_id
+                // This ensures a fresh session is created
+                const requestBody = {
+                    step: 'send_ai_starting_disclaimer',
+                    session_id: ''
+                };
+                
+                const response = await fetch(this.config.webhookUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                if (!response.ok) {
+                    console.warn('Failed to fetch starting disclaimer:', response.status);
+                    return;
+                }
+                
+                const data = await response.json();
+                
+                // Save session_id from backend response if provided
+                if (data && data.session_id) {
+                    this.saveSessionId(data.session_id);
+                    this.state.session_id = data.session_id;
+                }
+                
+                // If backend returns a message, display it as a disclaimer banner
+                if (data && data.message && data.message.trim() !== '') {
+                    this.showStartingDisclaimer(data);
+                }
+            } catch (error) {
+                console.warn('Error fetching starting disclaimer:', error);
+                // Silently fail - don't block user from using chatbot
+            }
+        }
+        
+        /**
+         * Displays the starting disclaimer banner at the top of the messages area
+         * 
+         * @param {Object} responseData - The response object from backend containing message, privacy_url, terms_url
+         */
+        showStartingDisclaimer(responseData) {
+            if (!responseData || !responseData.message || responseData.message.trim() === '') return;
+            
+            // Check if disclaimer already exists
+            const existingDisclaimer = this.messagesDiv.querySelector('.chatbot-lg-starting-disclaimer');
+            if (existingDisclaimer) {
+                return; // Already shown
+            }
+            
+            // Get message and URLs from response
+            let message = responseData.message;
+            const privacyUrl = responseData.privacy_url;
+            const termsUrl = responseData.terms_url;
+            
+            // Create disclaimer banner
+            const disclaimerDiv = document.createElement('div');
+            disclaimerDiv.className = 'chatbot-lg-starting-disclaimer';
+            
+            // Step 1: Replace link text with unique placeholders BEFORE any HTML processing
+            const PRIVACY_PLACEHOLDER = '___PRIVACY_POLICY_PLACEHOLDER___';
+            const TERMS_PLACEHOLDER = '___TERMS_CONDITIONS_PLACEHOLDER___';
+            const NEWLINE_PLACEHOLDER = '___NEWLINE_PLACEHOLDER___';
+            
+            // Replace "Privacy Policy" and "Terms and Conditions" with placeholders (case-insensitive)
+            if (privacyUrl) {
+                message = message.replace(/\bPrivacy Policy\b/gi, PRIVACY_PLACEHOLDER);
+            }
+            
+            if (termsUrl) {
+                message = message.replace(/\bTerms and Conditions\b/gi, TERMS_PLACEHOLDER);
+            }
+            
+            // Step 2: Replace newlines with a placeholder (before HTML escaping)
+            message = message.replace(/\n/g, NEWLINE_PLACEHOLDER);
+            
+            // Step 3: Escape HTML to prevent XSS (placeholders will remain as-is since they're unique)
+            const tempDiv = document.createElement('div');
+            tempDiv.textContent = message;
+            let escapedMessage = tempDiv.innerHTML;
+            
+            // Step 4: Convert newline placeholders to <br> tags
+            escapedMessage = escapedMessage.replace(new RegExp(NEWLINE_PLACEHOLDER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), '<br>');
+            
+            // Step 5: Replace placeholders with actual HTML links (with proper escaping of URLs)
+            if (privacyUrl) {
+                // Escape the URL to prevent XSS
+                const escapedPrivacyUrl = privacyUrl.replace(/"/g, '&quot;');
+                const privacyLink = `<a href="${escapedPrivacyUrl}" target="_blank" rel="noopener noreferrer" class="chatbot-disclaimer-link" style="color: #00B7B0 !important; text-decoration: underline !important; font-weight: 700 !important; cursor: pointer !important;"><strong style="font-weight: 700 !important; color: inherit !important;">Privacy Policy</strong></a>`;
+                escapedMessage = escapedMessage.replace(new RegExp(PRIVACY_PLACEHOLDER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), privacyLink);
+            }
+            
+            if (termsUrl) {
+                // Escape the URL to prevent XSS
+                const escapedTermsUrl = termsUrl.replace(/"/g, '&quot;');
+                const termsLink = `<a href="${escapedTermsUrl}" target="_blank" rel="noopener noreferrer" class="chatbot-disclaimer-link" style="color: #00B7B0 !important; text-decoration: underline !important; font-weight: 700 !important; cursor: pointer !important;"><strong style="font-weight: 700 !important; color: inherit !important;">Terms and Conditions</strong></a>`;
+                escapedMessage = escapedMessage.replace(new RegExp(TERMS_PLACEHOLDER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), termsLink);
+            }
+            
+            // Step 6: Set HTML content (no need to wrap in <p> since we're handling newlines with <br>)
+            disclaimerDiv.innerHTML = escapedMessage;
+            
+            // Debug: Log to console to verify links were created
+            const links = disclaimerDiv.querySelectorAll('a.chatbot-disclaimer-link');
+            console.log('Disclaimer links found:', links.length);
+            links.forEach((link, i) => {
+                console.log(`Link ${i + 1}:`, link.href, link.textContent);
+            });
+            
+            // Insert at the top of messages
+            if (this.messagesDiv.firstChild) {
+                this.messagesDiv.insertBefore(disclaimerDiv, this.messagesDiv.firstChild);
+            } else {
+                this.messagesDiv.appendChild(disclaimerDiv);
             }
         }
 
@@ -1673,26 +2218,43 @@
             // Clear all displayed messages
             this.messagesDiv.innerHTML = '';
             
-            // Clear session and cached messages
+            // Clear session and cached messages - destroy existing session_id
             this.clearSession();
             this.clearMessageCache();
             
             // Reset conversation state to initial values
             this.state = {
-                currentStep: '',
-                session_id: '',
+                currentStep: 'send_user_types',
+                session_id: '',  // Blank session_id - backend will generate new one
                 user_type: '',
                 concern_category: '',
                 question: ''
             };
             
-            // Show start button in footer
-            this.footerDiv.innerHTML = `
-                <button class="chatbot-lg-start-btn" id="chatbot-lg-start">Start Chat</button>
-            `;
+            // Show loading state
+            this.footerDiv.innerHTML = '<div style="text-align: center; color: rgba(0, 61, 70, 0.6); padding: 8px; font-size: 13px;">Loading...</div>';
             
-            // Re-attach event listener to the new start button
-            this.widget.querySelector('#chatbot-lg-start').addEventListener('click', () => this.startChat());
+            // Send request for send_user_types with blank session_id
+            this.sendRequest({
+                step: 'send_user_types',
+                session_id: ''  // Blank for new session - backend will generate
+            }).then(response => {
+                if (response) {
+                    this.handleResponse(response);
+                } else {
+                    // If request failed, show error and allow retry
+            this.footerDiv.innerHTML = `
+                        <button class="chatbot-lg-start-btn" id="chatbot-lg-start">Retry</button>
+                    `;
+                    this.widget.querySelector('#chatbot-lg-start').addEventListener('click', () => this.resetChat());
+                }
+            }).catch(error => {
+                console.error('Error in resetChat:', error);
+                this.footerDiv.innerHTML = `
+                    <button class="chatbot-lg-start-btn" id="chatbot-lg-start">Retry</button>
+                `;
+                this.widget.querySelector('#chatbot-lg-start').addEventListener('click', () => this.resetChat());
+            });
             
             // Scroll messages area to top
             this.messagesDiv.scrollTop = 0;
@@ -1825,8 +2387,34 @@
             html = result.join('\n');
             
             // Inline formatting (apply after structure is in place)
-            // Links: [text](url) - Parse markdown links FIRST
-            html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: underline; cursor: pointer;">$1</a>');
+            // Process markdown links FIRST, before other formatting
+            // This handles cases like [**text**](url) or [*text*](url)
+            
+            // Process markdown links: [text](url) - Handle links with formatting inside
+            // Match pattern: [text](url) where text can contain ** for bold
+            // Use non-greedy matching to handle multiple links in one line
+            html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, linkText, url) => {
+                // Trim whitespace from link text and URL
+                linkText = linkText.trim();
+                url = url.trim();
+                
+                // Process bold inside link text: **text** -> <strong>text</strong>
+                // Handle multiple bold sections in the same link text
+                let processedText = linkText.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+                processedText = processedText.replace(/__(.+?)__/g, '<strong>$1</strong>');
+                
+                // Process italic inside link text: *text* -> <em>text</em>
+                // Only process single asterisks/underscores that aren't part of bold
+                processedText = processedText.replace(/(?<!\*)\*([^*\n]+?)\*(?!\*)/g, '<em>$1</em>');
+                processedText = processedText.replace(/(?<!_)_([^_\n]+?)_(?!_)/g, '<em>$1</em>');
+                
+                // Escape URL to prevent XSS
+                const div2 = document.createElement('div');
+                div2.textContent = url;
+                const escapedUrl = div2.innerHTML;
+                
+                return `<a href="${escapedUrl}" target="_blank" rel="noopener noreferrer" style="color: #00B7B0; text-decoration: underline; cursor: pointer; word-break: break-word; overflow-wrap: break-word;">${processedText}</a>`;
+            });
             
             // Auto-detect and wrap plain URLs in anchor tags (for URLs not in markdown format)
             // Matches http://, https://, www. URLs
@@ -1849,7 +2437,7 @@
                 
                 // Add https:// if URL starts with www.
                 const fullUrl = url.startsWith('www.') ? `https://${url}` : url;
-                return `<a href="${fullUrl}" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: underline; cursor: pointer;">${url}</a>`;
+                return `<a href="${fullUrl}" target="_blank" rel="noopener noreferrer" style="color: #00B7B0; text-decoration: underline; cursor: pointer; word-break: break-word; overflow-wrap: break-word;">${url}</a>`;
             });
             
             // Bold: **text** or __text__
@@ -1891,7 +2479,7 @@
             avatar.style.background = isBot 
                 ? `rgba(0, 61, 70, 0.85)`
                 : `rgba(0, 183, 176, 0.85)`;
-            avatar.textContent = isBot ? '💬' : '👤';
+            avatar.textContent = isBot ? '🤖' : '👤';
             
             const container = document.createElement('div');
             container.className = 'chatbot-lg-message-container';
@@ -2029,7 +2617,7 @@
             typing.id = 'chatbot-lg-typing';
             typing.className = 'chatbot-lg-message bot';
             typing.innerHTML = `
-                <div class="chatbot-lg-message-avatar" style="background: rgba(0, 61, 70, 0.85);">💬</div>
+                <div class="chatbot-lg-message-avatar" style="background: rgba(0, 61, 70, 0.85);">🤖</div>
                 <div class="chatbot-lg-message-bubble">
                     <div class="typing-indicator">
                         <div class="typing-dot"></div>
@@ -2083,11 +2671,14 @@
                 
                 // For Step 1 (send_user_types), only send step and session_id
                 if (data.step === 'send_user_types') {
-                    // Try to restore session_id from storage, but send empty if new session
-                    const savedSessionId = this.getSessionId();
+                    // ALWAYS include session_id - prioritize state over explicitly passed empty string
+                    // Get from: provided value (if truthy) -> state -> sessionStorage -> empty string
+                    const sessionId = (data.session_id && data.session_id.trim() !== '') 
+                        ? data.session_id 
+                        : (this.state.session_id || this.getSessionId() || '');
                     const requestBody = {
                         step: 'send_user_types',
-                        session_id: savedSessionId || ''  // Use saved session_id if exists, otherwise blank for new session
+                        session_id: sessionId
                     };
                     
                     console.log('📤 Step 1 Request:', JSON.stringify(requestBody, null, 2));
@@ -2118,9 +2709,9 @@
                     return parsedResponse;
                 }
                 
-                // For other steps, ensure session_id is included
-                if (data.session_id === undefined || data.session_id === '') {
-                    // Try to get from state or sessionStorage
+                // For all other steps, ALWAYS ensure session_id is included
+                // Get from: provided value -> state -> sessionStorage -> empty string
+                if (!data.session_id) {
                     data.session_id = this.state.session_id || this.getSessionId() || '';
                 }
                 
@@ -2241,12 +2832,19 @@
                 }
             }
             
-            // No cached messages or restoration failed - start new session
-            this.clearSession();
+            // Remove starting disclaimer if it exists
+            const startingDisclaimer = this.messagesDiv.querySelector('.chatbot-lg-starting-disclaimer');
+            if (startingDisclaimer) {
+                startingDisclaimer.remove();
+            }
+            
+            // No cached messages or restoration failed - start new conversation flow
+            // BUT preserve session_id if it was already set from send_ai_starting_disclaimer
+            const existingSessionId = this.state.session_id || this.getSessionId() || '';
             this.clearMessageCache();
             this.state = {
                 currentStep: 'send_user_types',
-                session_id: '',
+                session_id: existingSessionId, // Preserve session_id from disclaimer
                 user_type: '',
                 concern_category: '',
                 question: ''
@@ -2254,10 +2852,10 @@
 
             this.footerDiv.innerHTML = '<div style="text-align: center; color: rgba(0, 61, 70, 0.6); padding: 8px; font-size: 13px;">Loading...</div>';
 
-            // Send request with blank session_id for new session
+            // Send request - session_id will be auto-filled by sendRequest() from state or storage
             const response = await this.sendRequest({
-                step: 'send_user_types',
-                session_id: ''  // Blank for new session - backend will generate
+                step: 'send_user_types'
+                // session_id will be automatically included by sendRequest() logic
             });
 
             if (response) {
@@ -2489,9 +3087,20 @@
          * @param {Array} [response.options] - Array of option buttons to display
          */
         handleResponse(response) {
+            // Special handling for starting disclaimer step
+            if (response.step === 'send_ai_starting_disclaimer') {
+                // Show disclaimer with embedded links
+                if (response.message && response.message.trim() !== '') {
+                    this.showStartingDisclaimer(response);
+                }
+                // Show "Start Chat" button (already in footer)
+                return; // Don't process as regular message
+            }
+            
             // Save session_id from backend response
             if (response.session_id) {
                 this.saveSessionId(response.session_id);
+                this.state.session_id = response.session_id; // Also update state
             }
 
             // Use the step name from backend response (matches the switch node branch that processed it)
