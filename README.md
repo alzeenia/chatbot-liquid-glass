@@ -1,232 +1,237 @@
 # 🍎 Chatbot Liquid Glass - Apple-Inspired Design
 
-A **stunning, production-ready** chatbot widget with **Apple liquid glass** (glassmorphism) design. Built with pure JavaScript, no dependencies, and fully customizable.
-
-## ✨ Features
-
-- 🍎 **Apple Liquid Glass Design** - Beautiful glassmorphism effects with backdrop blur
-- 🔊 **Sound Effects** - Subtle audio feedback for bot messages (configurable)
-- 📱 **Mobile-Friendly** - Fully responsive, works on all devices
-- 🎨 **Brand Customizable** - Easy color and styling customization
-- ⚡ **Lightweight** - ~50KB, no dependencies
-- 🔒 **Secure** - No hardcoded secrets, webhook URL required
-- ♿ **Accessible** - Keyboard navigation support
-- 🎯 **Production Ready** - Battle-tested and ready to deploy
-
-## 🚀 Quick Start
-
-### Installation
-
-**Via jsDelivr CDN (Recommended):**
-```html
-<script src="https://cdn.jsdelivr.net/gh/YOUR_USERNAME/chatbot-liquid-glass@main/chatbot-liquid-glass.js"></script>
-<script>
-  ChatbotLiquidGlass.init({
-    webhookUrl: 'YOUR_N8N_WEBHOOK_URL', // ⚠️ REQUIRED
-    position: 'bottom-right'
-  });
-</script>
-```
-
-**Via GitHub Pages:**
-```html
-<script src="https://YOUR_USERNAME.github.io/chatbot-liquid-glass/chatbot-liquid-glass.js"></script>
-```
-
-**Via Raw GitHub:**
-```html
-<script src="https://raw.githubusercontent.com/YOUR_USERNAME/chatbot-liquid-glass/main/chatbot-liquid-glass.js"></script>
-```
-
-**Via npm (if published):**
-```bash
-npm install chatbot-liquid-glass
-```
-
-## 📋 Usage
-
-### Basic Usage
-
-```html
-<!DOCTYPE html>
-<html>
-<head>
-  <title>My Website</title>
-</head>
-<body>
-  <!-- Your website content -->
-  
-  <!-- Chatbot Script - Add before closing </body> tag -->
-  <script src="https://cdn.jsdelivr.net/gh/YOUR_USERNAME/chatbot-liquid-glass@main/chatbot-liquid-glass.js"></script>
-  <script>
-    ChatbotLiquidGlass.init({
-      webhookUrl: 'YOUR_N8N_WEBHOOK_URL', // ⚠️ REQUIRED - Get from backend
-      position: 'bottom-right'
-    });
-  </script>
-</body>
-</html>
-```
-
-### Configuration Options
-
-```javascript
-ChatbotLiquidGlass.init({
-  webhookUrl: 'YOUR_WEBHOOK_URL',     // Required - n8n webhook URL
-  position: 'bottom-right',            // Widget position: 'bottom-right', 'bottom-left', 'top-right', 'top-left'
-  title: 'Genie Support',              // Chatbot title
-  subtitle: 'The Digital PO Box',       // Chatbot subtitle
-  primaryColor: '#003D46',             // Brand primary color
-  accentColor: '#00B7B0',              // Brand accent color
-  highlightColor: '#FF6A3D',          // Brand highlight color
-  soundsEnabled: true,                 // Enable/disable sound effects
-  showBadge: true                      // Show notification badge
-});
-```
-
-## 🎨 Design Features
-
-### Glassmorphism Effects
-- **Frosted Glass**: `backdrop-filter: blur(20-40px)` for authentic glass effect
-- **Translucent Backgrounds**: RGBA colors with transparency
-- **Multi-layer Shadows**: Realistic depth and dimension
-- **Smooth Animations**: Elegant transitions and micro-interactions
-
-### Visual Elements
-- Sleek, compact option buttons with smart grid layout
-- Glass-style message bubbles
-- Translucent header and footer
-- Gradient overlays for depth
-- Soft border highlights
-
-## 🔒 Security Best Practices
-
-### ❌ Don't Do This (Exposes Webhook URL):
-```javascript
-ChatbotLiquidGlass.init({
-  webhookUrl: 'https://n8n.example.com/webhook/secret-key-123' // Visible in source code!
-});
-```
-
-### ✅ Do This Instead (Backend Proxy):
-```javascript
-// Frontend
-ChatbotLiquidGlass.init({
-  webhookUrl: '/api/chatbot' // Your backend endpoint
-});
-
-// Backend (Node.js example)
-app.post('/api/chatbot', async (req, res) => {
-  const response = await fetch(process.env.N8N_WEBHOOK_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(req.body)
-  });
-  res.json(await response.json());
-});
-```
-
-## 🌐 Browser Support
-
-- ✅ Chrome 76+
-- ✅ Firefox 103+
-- ✅ Safari 9+
-- ✅ Edge 79+
-
-**Note:** Glass effects require `backdrop-filter` support. Older browsers will show semi-transparent backgrounds without blur.
-
-## 📁 Files
-
-- **`chatbot-liquid-glass.js`** ⭐ - Main chatbot script (production ready)
-- **`README.md`** - This file
-- **`LICENSE`** - MIT License
-- **`package.json`** - npm package configuration
-
-### Documentation
-- **`GITHUB_DEPLOYMENT.md`** - How to publish to GitHub
-- **`PRODUCTION_TESTING_GUIDE.md`** - Testing on production website
-- **`FRONTEND_DEVELOPER_INSTRUCTIONS.md`** - Instructions for frontend devs
-- **`LOCAL_TESTING_STEPS.md`** - Local development setup
-
-## 🧪 Local Development
-
-### Prerequisites
-- Node.js (for local testing server only)
-
-### Setup
-
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/YOUR_USERNAME/chatbot-liquid-glass.git
-   cd chatbot-liquid-glass
-   ```
-
-2. **Create `.env` file:**
-   ```bash
-   echo "CHATBOT_WEBHOOK_URL=https://your-webhook-url.com/webhook/path" > .env
-   ```
-
-3. **Start local server:**
-   ```bash
-   node local-server.js
-   ```
-
-4. **Open test page:**
-   ```
-   http://localhost:3000/test-liquid-glass.html
-   ```
-
-**Note:** The local server is only for testing. Production doesn't need it!
-
-## 🎯 Features in Detail
-
-### Smart Badge Notification
-- Badge only appears when bot sends a new message
-- Automatically hides when widget is opened
-- No false notifications
-
-### Reset Functionality
-- "Start Over" button after "Talk to Human"
-- Clears chat history and resets state
-- Fresh conversation start
-
-### Sound Effects
-- Subtle audio feedback for bot messages
-- Configurable (can be disabled)
-- Uses Web Audio API (no external files)
-
-### Sleek Options Design
-- Compact, space-efficient buttons
-- Smart grid layout (auto-adjusts columns)
-- Icons for visual clarity
-
-## 📞 Support
-
-- 📧 Email: support@thedigitalpobox.com
-- 🐛 Issues: [GitHub Issues](https://github.com/YOUR_USERNAME/chatbot-liquid-glass/issues)
-- 📚 Documentation: See documentation files in repository
-
-## 📄 License
-
-MIT License - See [LICENSE](LICENSE) file for details.
-
-## 🙏 Credits
-
-- **Design Inspiration**: Apple's liquid glass aesthetic
-- **Brand**: The Digital PO Box
-- **Font**: Montserrat (Google Fonts)
-
-## 🔄 Changelog
-
-### v1.0.0 (Current)
-- ✅ Initial release
-- ✅ Apple liquid glass design
-- ✅ Sound effects
-- ✅ Smart badge notifications
-- ✅ Reset functionality
-- ✅ Sleek option buttons
-- ✅ Production ready
+Apple style, liquid glass chatbot widget that sits on any website and talks to your backend AI workflow.  
+Built with plain JavaScript, no heavy framework, and easy to skin for any brand.
 
 ---
+
+## What this chatbot does now
+
+- Shows a floating, Apple like glass widget on the site
+- Guides the user through a structured support flow instead of a free for all chat
+- Calls your AI backend (n8n / Node / whatever) with the user question and session data
+- Shows AI answers with an explicit AI disclaimer step
+- Lets the user:
+  - Rate the answer
+  - Choose a feedback reason
+  - Add optional free text feedback
+  - Mark themselves as customer or not sure etc
+- Handles "Talk to human" by sending the user to the correct contact page
+- Sends a final feedback payload to your backend that you can store in PostgreSQL
+
+---
+
+## Features
+
+### UI and UX
+
+- Apple style liquid glass design with blur and subtle shadows
+- Floating badge that expands into a full chat panel
+- Mobile friendly and responsive
+- Accessible title, focus states, and keyboard navigation
+- Brand colors, logo, and copy all configurable in a single JS config
+
+### Conversation flow
+
+The default flow is step based:
+
+1. `start`  
+   Show greeting, basic copy about what the bot can help with, and privacy hint.
+
+2. `collect_topic`  
+   User picks a topic or intent from quick reply buttons  
+   Example: "Pricing", "Addresses and locations", "How it works", "Technical issues", "Other".
+
+3. `collect_question`  
+   User types their actual question.  
+   Widget sends `{ session_id, step, topic, question }` to your backend.
+
+4. `ai_answer`  
+   Backend returns an answer.  
+   Widget renders:
+   - AI answer text
+   - Optional links (for example pricing page, contact page)
+   - AI disclaimer badge like "This answer is generated by AI. Please verify important details."
+
+5. `feedback`  
+   After the answer is shown, the user sees:
+   - Rating 1 to 5
+   - Feedback options: for example `answer_helped`, `answer_wrong`, `too_generic`, `other`
+   - Optional comment box for free text feedback
+   - User type selector: `customer`, `not_customer`, `not_sure`
+
+6. `send_ai_disclaimer` / `handoff`  
+   If the user taps "Talk to a human", the bot:
+   - Shows a short message explaining that a human can help further
+   - Shows a button to open your contact page or support form
+   - Ends the chat session gracefully
+
+All steps are controlled from the front end through a clear `step` field so your backend and database can understand what is happening.
+
+---
+
+## Backend contracts
+
+You can wire the widget to any backend. Typical pattern:
+
+### Chat endpoint
+
+`POST /api/chat`
+
+Request body example:
+
+```json
+{
+  "session_id": "session_761a2752-b395-4e97-aec4-301e528ba051",
+  "step": "ai_answer",
+  "topic": "pricing",
+  "question": "What is the cost?",
+  "history": [
+    {
+      "role": "user",
+      "content": "What is the cost?"
+    }
+  ],
+  "meta": {
+    "user_agent": "Mozilla/5.0",
+    "page_url": "https://example.com/pricing"
+  }
+}
+
+Response example:
+
+{
+  "answer": "Our pricing starts at 14.90 per month per address. You can find all details on the pricing page.",
+  "links": [
+    {
+      "label": "Open pricing page",
+      "url": "https://example.com/pricing"
+    }
+  ],
+  "show_disclaimer": true,
+  "continue_step": "feedback"
+}
+
+Feedback endpoint
+
+POST /api/chat/feedback
+
+This is what the widget sends at the end of the flow:
+
+{
+  "step": "send_ai_disclaimer",
+  "session_id": "session_761a2752-b395-4e97-aec4-301e528ba051",
+  "rating": 5,
+  "feedback_option": "other",
+  "feedback_text": "",
+  "user_type": "not_sure",
+  "question": "What is the cost?",
+  "answer": "Our pricing starts at 14.90 per month per address..."
+}
+
+You typically store this payload in PostgreSQL in a table like chatbot_feedback with columns:
+	•	id
+	•	session_id
+	•	step
+	•	rating
+	•	feedback_option
+	•	feedback_text
+	•	user_type
+	•	question
+	•	answer
+	•	created_at
+
+⸻
+
+Quick start
+	1.	Include the script
+
+<link rel="stylesheet" href="/chatbot/chatbot.css" />
+<script src="/chatbot/chatbot.js" defer></script>
+
+	2.	Initialize the widget
+
+<script>
+  window.addEventListener("DOMContentLoaded", () => {
+    window.ChatbotLiquidGlass.init({
+      apiBaseUrl: "https://your-backend.com/api",
+      contactPageUrl: "https://your-website.com/contact",
+      brand: {
+        name: "The Digital PO Box",
+        primaryColor: "#028D89",
+        accentColor: "#FF6B3D",
+        logoUrl: "/assets/logo.svg"
+      },
+      sounds: {
+        enabled: true,
+        message: "/chatbot/sounds/message.mp3"
+      }
+    });
+  });
+</script>
+
+	3.	Implement the backend
+
+	•	POST /api/chat to call your AI workflow and return the answer object
+	•	POST /api/chat/feedback to store rating and feedback in PostgreSQL
+
+⸻
+
+Configuration options
+
+ChatbotLiquidGlass.init(options) accepts:
+
+type ChatbotOptions = {
+  apiBaseUrl: string
+  contactPageUrl: string
+  brand?: {
+    name?: string
+    primaryColor?: string
+    accentColor?: string
+    logoUrl?: string
+  }
+  sounds?: {
+    enabled?: boolean
+    message?: string
+  }
+  defaults?: {
+    locale?: string
+    initialTopic?: string | null
+  }
+}
+
+You can extend this in code if you need more advanced behavior.
+
+⸻
+
+Development
+
+git clone https://github.com/alzeenia/chatbot-liquid-glass.git
+cd chatbot-liquid-glass
+npm install
+npm run dev
+
+The dev server will serve a demo page so you can test changes to the widget and styles.
+
+⸻
+
+Changelog
+
+v2.x (Current)
+	•	Step based support flow with rating and feedback
+	•	AI disclaimer step
+	•	“Talk to human” contact handoff
+	•	Feedback JSON payload ready for PostgreSQL
+	•	Session id based tracking
+
+v1.0.0
+	•	Initial Apple liquid glass design
+	•	Sound effects
+	•	Smart badge notifications
+	•	Reset functionality
+	•	Option buttons
+	•	Base production widget
+
+⸻
 
 **Made with ❤️ for The Digital PO Box**
