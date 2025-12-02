@@ -1,4 +1,4 @@
-/**
+/** THIS
  * Chatbot Widget Embed Script - Apple Liquid Glass Design
  * 
  * A fully-featured chatbot widget with glassmorphism (frosted glass) aesthetic,
@@ -315,10 +315,21 @@
                 } else if (msg.options && Array.isArray(msg.options) && msg.options.length > 0) {
                     // Restore regular options (not rating UI)
                     // Options are restored AFTER state is set, so they have correct context
-                    // Options will be clickable because state is already restored
-                    this.addOptions(msg.options);
+                    // Temporarily set currentStep to the message's step so addOptions knows which step these options belong to
+                    const originalStep = this.state.currentStep;
+                    if (msg.step) {
+                        this.state.currentStep = msg.step;
+                    }
+                    // Temporarily disable the history check to avoid checking before all messages are restored
+                    this.addOptions(msg.options, false);
+                    // Restore the original step after adding options
+                    this.state.currentStep = originalStep;
                 }
             });
+            
+            // After ALL messages are restored, disable any previously selected options in the entire chat history
+            // This ensures that options from earlier steps are properly disabled based on the full state
+            this.disableSelectedOptionsInHistory();
             
             // Always set current step from the last message (most recent step)
             // This ensures we have the correct step even if earlier messages had different steps
@@ -2536,7 +2547,7 @@
          * 
          * @param {Array} options - Array of option objects with id and option_value properties
          */
-        addOptions(options) {
+        addOptions(options, checkHistory = true) {
             const lastMessage = this.messagesDiv.lastElementChild;
             if (!lastMessage) return;
             
@@ -2546,17 +2557,125 @@
             const optionsDiv = document.createElement('div');
             optionsDiv.className = 'chatbot-lg-options';
             
+            // Store the current step with this options container so we can identify which step these options belong to
+            const stepForTheseOptions = this.state.currentStep;
+            optionsDiv.setAttribute('data-step', stepForTheseOptions);
+            
+            // Check if this step has a selection (meaning user already selected something at this step)
+            // If so, ALL options from this step should be disabled
+            // EXCEPT: if this is the current step (user should still be able to select)
+            const stepHasSelection = this.stepHasSelection(stepForTheseOptions);
+            const isCurrentStep = stepForTheseOptions === this.state.currentStep;
+            const shouldDisableAllOptions = stepHasSelection && !isCurrentStep;
+            
             options.forEach(option => {
                 const btn = document.createElement('button');
                 btn.className = 'chatbot-lg-option-btn';
                 // Display option_value exactly as sent from backend (Google Sheets)
                 // Emojis are controlled by backend, not frontend
                 btn.textContent = option.option_value || option.value || '';
-                btn.onclick = () => this.handleOptionClick(option);
+                
+                // Store option data on button for later reference
+                if (option.id) btn.setAttribute('data-option-id', option.id);
+                if (option.option_value) btn.setAttribute('data-option-value', option.option_value);
+                // Store the step this option belongs to
+                btn.setAttribute('data-step', stepForTheseOptions);
+                
+                // If this step has a selection and it's not the current step, disable ALL options
+                if (shouldDisableAllOptions) {
+                    btn.disabled = true;
+                    btn.setAttribute('data-selected', 'true');
+                } else {
+                    // Only set onclick if not disabled
+                    btn.onclick = () => this.handleOptionClick(option);
+                }
+                
                 optionsDiv.appendChild(btn);
             });
             
             container.appendChild(optionsDiv);
+            
+            // After adding new options, disable any previously selected options in the entire chat history
+            // Only check history if checkHistory is true (default), skip when restoring from cache
+            if (checkHistory) {
+                this.disableSelectedOptionsInHistory();
+            }
+        }
+        
+        /**
+         * Checks if a given step has a selection made by the user
+         * 
+         * @param {string} step - The step to check (e.g., 'send_user_types', 'send_concern_categories', 'send_top_questions')
+         * @returns {boolean} True if the step has a selection, false otherwise
+         */
+        stepHasSelection(step) {
+            if (step === 'send_user_types') {
+                return !!this.state.user_type;
+            }
+            if (step === 'send_concern_categories') {
+                return !!this.state.concern_category;
+            }
+            if (step === 'send_top_questions') {
+                return !!this.state.question;
+            }
+            // For send_query_answer step: if we have a question and we're not currently at send_query_answer,
+            // it means we've already processed an answer, so all options from that step should be disabled
+            if (step === 'send_query_answer') {
+                // If we have a question and current step is not send_query_answer, it means we've moved past it
+                return !!this.state.question && this.state.currentStep !== 'send_query_answer';
+            }
+            return false;
+        }
+        
+        /**
+         * Disables all option buttons in chat history that match previously selected values
+         * This ensures that options from previous steps remain disabled when new options are added
+         */
+        disableSelectedOptionsInHistory() {
+            // Get all option buttons in the chat
+            const allOptionButtons = document.querySelectorAll('.chatbot-lg-option-btn');
+            
+            // Get the current step - options from the current step should remain enabled
+            const currentStep = this.state.currentStep;
+            
+            // Determine which steps have selections based on state
+            // When a selection is made at a step, ALL options from that step should be disabled
+            // BUT: Don't disable options from the current step (user should still be able to select)
+            const stepsWithSelections = new Set();
+            
+            // If user_type is set, the send_user_types step has a selection
+            if (this.state.user_type) {
+                stepsWithSelections.add('send_user_types');
+            }
+            // If concern_category is set, the send_concern_categories step has a selection
+            if (this.state.concern_category) {
+                stepsWithSelections.add('send_concern_categories');
+            }
+            // If question is set, the send_top_questions step has a selection
+            if (this.state.question) {
+                stepsWithSelections.add('send_top_questions');
+            }
+            // If we have a question and we're not at send_query_answer step, 
+            // it means we've moved past send_query_answer, so disable those options
+            if (this.state.question && this.state.currentStep !== 'send_query_answer') {
+                stepsWithSelections.add('send_query_answer');
+            }
+            
+            // Disable ALL options from steps that have selections, EXCEPT the current step
+            allOptionButtons.forEach(btn => {
+                // Skip if already disabled
+                if (btn.disabled) return;
+                
+                const btnStep = btn.getAttribute('data-step');
+                
+                // If this button belongs to a step that has a selection AND it's not the current step, disable it
+                if (btnStep && stepsWithSelections.has(btnStep) && btnStep !== currentStep) {
+                    btn.disabled = true;
+                    btn.setAttribute('data-selected', 'true');
+                    // Remove onclick handler since it's disabled
+                    btn.onclick = null;
+                }
+            });
         }
 
         /**
@@ -2888,8 +3007,23 @@
          * @param {string} option.option_value - Display text for the option
          */
         async handleOptionClick(option) {
-            // Disable all option buttons to prevent double-clicking
-            document.querySelectorAll('.chatbot-lg-option-btn').forEach(btn => btn.disabled = true);
+            // Get the step this option belongs to from current state
+            // When an option is clicked, we're at the step that shows these options
+            const optionStep = this.state.currentStep;
+            
+            // Disable ALL options from the same step (not just all options)
+            // This prevents users from changing their selection at a previous step
+            // Note: This will disable options from the current step, which is correct
+            // because after clicking, we move to the next step
+            const allOptionButtons = document.querySelectorAll('.chatbot-lg-option-btn');
+            allOptionButtons.forEach(btn => {
+                const btnStep = btn.getAttribute('data-step');
+                if (btnStep === optionStep) {
+                    btn.disabled = true;
+                    btn.setAttribute('data-selected', 'true');
+                    btn.onclick = null; // Remove click handler
+                }
+            });
             
             // Add user message
             // Safeguard: If option_value is a step name (shouldn't happen, but handle gracefully)
@@ -3497,13 +3631,43 @@
 
             try {
                 // Send rating and feedback to backend
-                // Backend expects: rating (1-5), feedback_option (ID), feedback_text (only if "Other" selected)
+                // Combine feedback_option and feedback_text into user_feedback
+                // If user selected a predefined option, use that option's text
+                // If user typed custom feedback, use the typed text
+                let userFeedback = '';
+                if (feedbackText && feedbackText.trim() !== '') {
+                    // User typed custom feedback (from "Other" option)
+                    userFeedback = feedbackText.trim();
+                } else if (feedbackOption) {
+                    // User selected a predefined feedback option
+                    // Find the option text from the DOM (from the <span> element inside the label)
+                    const radio = document.querySelector(`input[name="feedback-option"][value="${feedbackOption}"]`);
+                    if (radio) {
+                        const labelElement = radio.closest('.chatbot-lg-feedback-option');
+                        if (labelElement) {
+                            // Get text from the <span> element that contains the display value
+                            const spanElement = labelElement.querySelector('span');
+                            if (spanElement) {
+                                userFeedback = spanElement.textContent.trim();
+                            } else {
+                                // Fallback: get all text from label excluding the radio button
+                                userFeedback = labelElement.textContent.trim();
+                            }
+                        }
+                    }
+                    // Fallback: use the option ID if we can't find the text
+                    if (!userFeedback) {
+                        userFeedback = feedbackOption;
+                    }
+                }
+                
+                // Send rating and feedback to backend with same data structure as send_ai_disclaimer
+                // Include all the same fields that are sent on send_ai_disclaimer step
                 const response = await this.sendRequest({
                     step: 'send_ai_disclaimer',
                     session_id: this.state.session_id || '',
-                    rating: rating,
-                    feedback_option: feedbackOption || '',  // Selected option ID (e.g., 'perfect', 'slow', 'other')
-                    feedback_text: feedbackText || '',        // Custom text (only if "Other" was selected)
+                    user_rating: rating,              // Rating (1-5) - user's selected star rating
+                    user_feedback: userFeedback,     // Combined feedback: either selected option text or custom typed text
                     user_type: this.state.user_type || '',
                     concern_category: this.state.concern_category || '',
                     question: this.state.question || ''
