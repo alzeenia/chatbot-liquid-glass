@@ -307,7 +307,8 @@
                 const container = this.addMessage(msg.text, msg.isBot, false);
                 
                 // Check if this message should have rating UI (not regular options)
-                if (msg.rating_enabled === true && msg.feedback_options && Array.isArray(msg.feedback_options) && msg.feedback_options.length > 0) {
+                // Handle both boolean true and string "true" from cache
+                if ((msg.rating_enabled === true || msg.rating_enabled === 'true') && msg.feedback_options && Array.isArray(msg.feedback_options) && msg.feedback_options.length > 0) {
                     // Restore rating UI instead of regular options
                     // This is for the "redirect_to_human_support" step
                     this.addRatingUI(msg.feedback_options);
@@ -3111,7 +3112,8 @@
             }
 
             // Check if rating UI should be shown (rating_enabled takes precedence over regular options)
-            const isRatingStep = response.rating_enabled === true;
+            // Handle both boolean true and string "true" from backend
+            const isRatingStep = response.rating_enabled === true || response.rating_enabled === 'true';
             
             // Store options to attach to the message/answer
             // If rating is enabled, don't save options as regular options (they're feedback options for rating UI)
@@ -3165,7 +3167,8 @@
 
             // Add rating UI if backend explicitly enables it (via rating_enabled flag)
             // When rating_enabled is true, options contains feedback options (not action buttons)
-            if (response.rating_enabled === true) {
+            // Handle both boolean true and string "true" from backend
+            if (response.rating_enabled === true || response.rating_enabled === 'true') {
                 // Add rating UI under the last bot message with feedback options from backend
                 // Debug: Log what we're receiving
                 console.log('📊 Rating enabled. Feedback options received:', response.options);
