@@ -27,6 +27,9 @@
 (function(window, document) {
     'use strict';
 
+    // Version identifier for production verification
+    console.log('🤖 Chatbot Liquid Glass V2 loaded');
+
     // Ensure DOM is ready before initializing (WordPress compatibility)
     // This allows the script to be loaded in footer and initialized immediately
     function domReady(fn) {
@@ -304,7 +307,6 @@
          */
         getLocaleFromURL() {
             try {
-                const url = window.location.href;
                 const pathname = window.location.pathname;
                 const searchParams = new URLSearchParams(window.location.search);
                 
@@ -341,7 +343,7 @@
                     }
                 }
                 
-                // 4. Check HTML lang attribute as fallback
+                // 4. Check HTML lang attribute
                 const htmlLang = document.documentElement.lang;
                 if (htmlLang) {
                     const locale = htmlLang.toLowerCase().split('-')[0];
@@ -350,11 +352,11 @@
                     }
                 }
                 
-                // Default to 'en' if no locale found
-                return 'en';
+                // STRICT: Return empty string if no locale found - NO FALLBACK
+                return '';
             } catch (error) {
                 console.warn('Error extracting locale from URL:', error);
-                return 'en'; // Default fallback
+                return ''; // STRICT: Return empty string on error - NO FALLBACK
             }
         }
         
@@ -2085,9 +2087,9 @@
             widget.innerHTML = `
                 <div class="chatbot-lg-header">
                     <div class="chatbot-lg-header-content">
-                        <div class="chatbot-lg-avatar" id="chatbot-lg-header-avatar">
-                            <img id="chatbot-lg-avatar-img" src="chatbot_assets/chatbot-logo.png" alt="Chatbot Logo" style="display: none;">
-                            <svg id="chatbot-lg-avatar-fallback" width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display: block;">
+                        <div class="chatbot-lg-avatar" id="chatbot-lg-header-avatar" title="Chatbot V2">
+                            <img id="chatbot-lg-avatar-img" src="/wp-content/uploads/chatbot/chatbot_assets/chatbot-logo.png" alt="Chatbot Logo" style="display: none;" title="Chatbot V2">
+                            <svg id="chatbot-lg-avatar-fallback" width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display: block;" title="Chatbot V2">
                                 <path d="M20 2H4C2.9 2 2 2.9 2 4V22L6 18H20C21.1 18 22 17.1 22 16V4C22 2.9 21.1 2 20 2Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                             </svg>
                         </div>
@@ -2252,33 +2254,16 @@
             this.toggle.style.display = 'none';
             this.isOpen = true;
             
-            console.log('✅ Widget opened. MessagesDiv children:', this.messagesDiv.children.length);
-            
-            // Capture URL context when chat icon is clicked
-            const currentUrl = window.location.href;      // full URL
-            const path = window.location.pathname;          // just the path
-            const query = window.location.search;           // ?lang=en etc
-            
-            // Store globally for later use (as suggested)
-            window.tdpbChatbotContext = {
-                url: currentUrl,
-                path: path,
-                query: query,
-                timestamp: new Date().toISOString()
-            };
-            
             // Extract locale from URL ONCE when chat icon is clicked
             // This locale will be used for ALL subsequent steps, even if URL changes
-            // Always extract on first click, then stick to it for entire conversation
-            if (!this.state.locale || this.state.locale === '') {
-                const currentLocale = this.getLocaleFromURL();
-                this.state.locale = currentLocale;
-                console.log('🌍 Locale extracted from URL (will be used for ALL steps):', currentLocale, '| URL:', currentUrl);
-            } else {
-                // Locale already set - keep using the same one (sticky behavior)
-                console.log('🌍 Using existing locale (sticky - same for all steps):', this.state.locale, '| Current URL:', currentUrl, '(URL change ignored)');
+            if (!this.state.locale || this.state.locale.trim() === '') {
+                this.state.locale = this.getLocaleFromURL() || '';
             }
-            console.log('📍 URL Context:', window.tdpbChatbotContext);
+            
+            // Ensure locale is always a string
+            if (typeof this.state.locale !== 'string') {
+                this.state.locale = String(this.state.locale || '');
+            }
             
             // Hide notification badge when widget is opened
             if (this.badge) {
@@ -2329,12 +2314,80 @@
                 // Scroll to bottom to show latest messages
                 this.scrollToBottom();
             } else if (this.messagesDiv.children.length === 0) {
-                // Widget is empty - show immediate loading state
-                this.messagesDiv.innerHTML = '<div class="chatbot-lg-message chatbot-lg-bot-message"><div class="chatbot-lg-message-bubble">Loading...</div></div>';
+                // Widget is empty - check if disclaimer has already been fetched
+                // CRITICAL: Check DOM for disclaimer element (not just state)
+                const hasDisclaimerInDom = this.messagesDiv.querySelector('.chatbot-lg-starting-disclaimer') !== null;
+                const hasSessionId = this.state.session_id && this.state.session_id.trim() !== '';
                 
-                // Fetch starting disclaimer from backend
-                // Locale is already extracted above and will be included in the request
-                await this.fetchStartingDisclaimer();
+                // CRITICAL: On first click, always fetch disclaimer if:
+                // 1. No disclaimer in DOM (even if session_id exists - might be stale)
+                // 2. No session_id
+                // This ensures fresh disclaimer is fetched even if sessionStorage has stale data
+                if (!hasDisclaimerInDom) {
+                    // CRITICAL: Clear footer FIRST to ensure no button is visible
+                    if (this.footerDiv) {
+                        this.footerDiv.innerHTML = '';
+                    }
+                    
+                    // CRITICAL: Clear messagesDiv to ensure clean state
+                    if (this.messagesDiv) {
+                        this.messagesDiv.innerHTML = '';
+                    }
+                    
+                    // Clear any stale session_id if disclaimer doesn't exist in DOM
+                    if (hasSessionId && !hasDisclaimerInDom) {
+                        this.clearSession();
+                        this.clearMessageCache();
+                    }
+                    
+                    // Show typing indicator before making the request
+                    this.addTypingIndicator();
+                    this.scrollToBottom();
+                    
+                    // Small delay to ensure typing indicator is rendered
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    
+                    // Fetch starting disclaimer from backend
+                    // Locale is already extracted above and will be included in the request
+                    // DO NOT show button here - it will be shown in handleResponse() after response is received
+                    try {
+                        await this.fetchStartingDisclaimer();
+                    } catch (error) {
+                        console.error('❌ Error in fetchStartingDisclaimer:', error);
+                        this.removeTypingIndicator();
+                        if (this.footerDiv) {
+                            this.footerDiv.innerHTML = '<div style="text-align: center; color: #ff3d3d; padding: 8px; font-size: 13px;">Failed to load. Please try again.</div>';
+                        }
+                        if (this.messagesDiv) {
+                            this.messagesDiv.innerHTML = '<div class="chatbot-lg-message chatbot-lg-bot-message"><div class="chatbot-lg-message-bubble" style="color: #ff3d3d;">Unable to connect. Please refresh and try again.</div></div>';
+                        }
+                    }
+                } else if (hasDisclaimerInDom && hasSessionId) {
+                    // Both disclaimer in DOM and session_id exist - this is a restored state
+                    // Show Start Chat button only if we're at the beginning
+                    if (this.state.currentStep === 'send_user_types' || !this.state.currentStep) {
+                        if (this.footerDiv) {
+                            this.footerDiv.innerHTML = `
+                                <button class="chatbot-lg-start-btn" id="chatbot-lg-start">Start Chat</button>
+                            `;
+                            const startButton = this.widget.querySelector('#chatbot-lg-start');
+                            if (startButton) {
+                                startButton.addEventListener('click', () => this.startChat());
+                            }
+                        }
+                    }
+                } else if (hasDisclaimerInDom && !hasSessionId) {
+                    // Disclaimer exists but no session_id - show Start Chat button
+                    if (this.footerDiv) {
+                        this.footerDiv.innerHTML = `
+                            <button class="chatbot-lg-start-btn" id="chatbot-lg-start">Start Chat</button>
+                        `;
+                        const startButton = this.widget.querySelector('#chatbot-lg-start');
+                        if (startButton) {
+                            startButton.addEventListener('click', () => this.startChat());
+                        }
+                    }
+                }
             }
         }
         
@@ -2349,47 +2402,186 @@
                 // Ensure messagesDiv exists
                 if (!this.messagesDiv) {
                     console.error('❌ messagesDiv is not initialized');
+                    if (this.footerDiv) {
+                        this.footerDiv.innerHTML = '<div style="text-align: center; color: #ff3d3d; padding: 8px; font-size: 13px;">Error: Widget not initialized</div>';
+                    }
                     return;
                 }
                 
-                // Show loading indicator in footer
-                if (this.footerDiv) {
-                    this.footerDiv.innerHTML = '<div style="text-align: center; color: rgba(0, 61, 70, 0.6); padding: 8px; font-size: 13px;">Loading...</div>';
+                // Ensure webhookUrl is configured
+                if (!this.config || !this.config.webhookUrl) {
+                    console.error('❌ webhookUrl is not configured');
+                    this.removeTypingIndicator();
+                    if (this.footerDiv) {
+                        this.footerDiv.innerHTML = '<div style="text-align: center; color: #ff3d3d; padding: 8px; font-size: 13px;">Error: Webhook URL not configured</div>';
+                    }
+                    return;
                 }
                 
-                // For send_ai_starting_disclaimer step, ALWAYS send blank session_id
-                // This ensures a fresh session is created
-                // Use the locale from state (extracted when chat icon was clicked)
-                // Do NOT re-extract - stick to the same locale for entire conversation
-                const locale = this.state.locale || 'en'; // Fallback to 'en' if somehow not set
+                // Double-check: Don't fetch if disclaimer already exists in DOM
+                // CRITICAL: Only check DOM, not session_id - we want to fetch even if session_id exists (might be stale)
+                const hasDisclaimer = this.messagesDiv.querySelector('.chatbot-lg-starting-disclaimer') !== null;
                 
+                if (hasDisclaimer) {
+                    console.log('⚠️ Disclaimer already exists in DOM, skipping duplicate request');
+                    this.removeTypingIndicator();
+                    // Ensure Start Chat button is shown if disclaimer exists
+                    if (this.footerDiv && !this.footerDiv.querySelector('.chatbot-lg-start-btn')) {
+                        this.footerDiv.innerHTML = `
+                            <button class="chatbot-lg-start-btn" id="chatbot-lg-start">Start Chat</button>
+                        `;
+                        const startButton = this.widget.querySelector('#chatbot-lg-start');
+                        if (startButton) {
+                            startButton.addEventListener('click', () => this.startChat());
+                        }
+                    }
+                    return;
+                }
+                
+                // CRITICAL: Ensure footer is completely clear (no button shown yet)
+                if (this.footerDiv) {
+                    this.footerDiv.innerHTML = '';
+                }
+                
+                // CRITICAL: Ensure typing indicator is showing (loading animation)
+                // Remove any existing one first, then add fresh one
+                this.removeTypingIndicator();
+                this.addTypingIndicator();
+                
+                // Force scroll to show typing indicator
+                this.scrollToBottom();
+                
+                // Build request body with locale from state
+                const locale = (this.state.locale || '').trim();
                 const requestBody = {
                     step: 'send_ai_starting_disclaimer',
                     session_id: '',
                     locale: locale
                 };
                 
-                console.log('📤 Sending initial disclaimer request with locale:', locale, 'to:', this.config.webhookUrl);
+                const requestBodyString = JSON.stringify(requestBody);
                 
-                const response = await fetch(this.config.webhookUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(requestBody)
-                });
+                // Add timeout handling (25 seconds - less than typical WordPress 30s timeout)
+                const timeoutMs = 25000;
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
                 
-                console.log('📥 Response status:', response.status, response.statusText);
+                let response;
+                try {
+                    response = await fetch(this.config.webhookUrl, {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        },
+                        body: requestBodyString,
+                        signal: controller.signal
+                    });
+                    clearTimeout(timeoutId);
+                } catch (error) {
+                    clearTimeout(timeoutId);
+                    if (error.name === 'AbortError') {
+                        console.error('Request timeout after', timeoutMs, 'ms');
+                        this.removeTypingIndicator();
+                        if (this.footerDiv) {
+                            this.footerDiv.innerHTML = '<div style="text-align: center; color: #ff3d3d; padding: 8px; font-size: 13px;">Request timed out. The server is taking too long to respond. Please try again.</div>';
+                        }
+                        return;
+                    }
+                    throw error;
+                }
                 
                 if (!response.ok) {
                     const errorText = await response.text();
-                    console.error('❌ Failed to fetch starting disclaimer:', response.status, errorText);
+                    const isHtml = errorText.trim().startsWith('<!DOCTYPE') || errorText.trim().startsWith('<html');
+                    
+                    this.removeTypingIndicator();
+                    
+                    // For 502 errors, try retrying once
+                    if (response.status === 502) {
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+                        
+                        try {
+                            const retryController = new AbortController();
+                            const retryTimeoutId = setTimeout(() => retryController.abort(), timeoutMs);
+                            
+                            const retryResponse = await fetch(this.config.webhookUrl, {
+                                method: 'POST',
+                                headers: { 
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json'
+                                },
+                                body: requestBodyString,
+                                signal: retryController.signal
+                            });
+                            clearTimeout(retryTimeoutId);
+                            
+                            if (retryResponse.ok) {
+                                const contentType = retryResponse.headers.get('content-type') || '';
+                                if (contentType.includes('application/json')) {
+                                    const data = await retryResponse.json();
+                                    this.removeTypingIndicator();
+                                    if (data && data.session_id) {
+                                        this.saveSessionId(data.session_id);
+                                        this.state.session_id = data.session_id;
+                                    }
+                                    this.handleResponse(data);
+                                    return;
+                                }
+                            }
+                        } catch (retryError) {
+                            console.error('Retry failed:', retryError);
+                        }
+                    }
+                    
+                    // Show user-friendly error message
+                    let errorMessage = 'Failed to load. Please try again.';
+                    if (response.status === 502) {
+                        errorMessage = 'Service temporarily unavailable. The server is taking too long to respond. Please try again in a few moments.';
+                    } else if (response.status === 503) {
+                        errorMessage = 'Service is temporarily down for maintenance. Please try again later.';
+                    } else if (response.status >= 500) {
+                        errorMessage = 'Server error. Please try again later.';
+                    }
+                    
+                    this.removeTypingIndicator();
                     if (this.footerDiv) {
-                        this.footerDiv.innerHTML = '<div style="text-align: center; color: #ff3d3d; padding: 8px; font-size: 13px;">Failed to load. Please try again.</div>';
+                        this.footerDiv.innerHTML = `<div style="text-align: center; color: #ff3d3d; padding: 8px; font-size: 13px;">${errorMessage}</div>`;
+                    }
+                    
+                    if (!isHtml) {
+                        console.error('Error response:', errorText);
+                    }
+                    
+                    return;
+                }
+                
+                // Check if response is JSON before parsing
+                const contentType = response.headers.get('content-type') || '';
+                const isJson = contentType.includes('application/json');
+                
+                let data;
+                if (isJson) {
+                    try {
+                        data = await response.json();
+                    } catch (e) {
+                        console.error('Failed to parse JSON response:', e);
+                        this.removeTypingIndicator();
+                        if (this.footerDiv) {
+                            this.footerDiv.innerHTML = '<div style="text-align: center; color: #ff3d3d; padding: 8px; font-size: 13px;">Invalid response from server. Please try again.</div>';
+                        }
+                        return;
+                    }
+                } else {
+                    this.removeTypingIndicator();
+                    if (this.footerDiv) {
+                        this.footerDiv.innerHTML = '<div style="text-align: center; color: #ff3d3d; padding: 8px; font-size: 13px;">Invalid response format. Please try again.</div>';
                     }
                     return;
                 }
                 
-                const data = await response.json();
-                console.log('📥 Received disclaimer response:', data);
+                // Remove typing indicator before processing response
+                this.removeTypingIndicator();
                 
                 // Save session_id from backend response if provided
                 if (data && data.session_id) {
@@ -2398,28 +2590,11 @@
                 }
                 
                 // Use handleResponse to process the disclaimer response
-                // This ensures the "Start Chat" button is shown correctly
+                // This ensures the "Start Chat" button is shown correctly ONLY after response is received
                 this.handleResponse(data);
-                
-                // Fallback: If handleResponse didn't show button (e.g., step mismatch), show it anyway
-                // This ensures button appears even if response structure is unexpected
-                setTimeout(() => {
-                    const startButton = this.widget.querySelector('#chatbot-lg-start');
-                    if (!startButton && this.messagesDiv.querySelector('.chatbot-lg-starting-disclaimer')) {
-                        console.log('⚠️ Button not shown by handleResponse, showing fallback button');
-                        if (this.footerDiv) {
-                            this.footerDiv.innerHTML = `
-                                <button class="chatbot-lg-start-btn" id="chatbot-lg-start">Start Chat</button>
-                            `;
-                            const btn = this.widget.querySelector('#chatbot-lg-start');
-                            if (btn) {
-                                btn.addEventListener('click', () => this.startChat());
-                            }
-                        }
-                    }
-                }, 100);
             } catch (error) {
                 console.error('❌ Error fetching starting disclaimer:', error);
+                this.removeTypingIndicator();
                 if (this.footerDiv) {
                     this.footerDiv.innerHTML = '<div style="text-align: center; color: #ff3d3d; padding: 8px; font-size: 13px;">Connection error. Please check your network.</div>';
                 }
@@ -2507,13 +2682,6 @@
             
             // Step 6: Set HTML content (no need to wrap in <p> since we're handling newlines with <br>)
             disclaimerDiv.innerHTML = escapedMessage;
-            
-            // Debug: Log to console to verify links were created
-            const links = disclaimerDiv.querySelectorAll('a.chatbot-disclaimer-link');
-            console.log('Disclaimer links found:', links.length);
-            links.forEach((link, i) => {
-                console.log(`Link ${i + 1}:`, link.href, link.textContent);
-            });
             
             // Insert at the top of messages
             if (this.messagesDiv.firstChild) {
@@ -2645,7 +2813,7 @@
             this.sendRequest({
                 step: 'send_user_types',
                 session_id: '',  // Blank for new session - backend will generate
-                locale: this.state.locale || 'en'
+                locale: this.state.locale || ''
             }).then(response => {
                 if (response) {
                     this.handleResponse(response);
@@ -3147,9 +3315,17 @@
          * The indicator is removed when the response is received.
          */
         addTypingIndicator() {
+            this.removeTypingIndicator();
+            
+            if (!this.messagesDiv) {
+                console.error('Cannot add typing indicator - messagesDiv not found');
+                return;
+            }
+            
             const typing = document.createElement('div');
             typing.id = 'chatbot-lg-typing';
             typing.className = 'chatbot-lg-message bot';
+            typing.style.display = 'flex';
             typing.innerHTML = `
                 <div class="chatbot-lg-message-avatar" style="background: rgba(0, 61, 70, 0.85);">🤖</div>
                 <div class="chatbot-lg-message-bubble">
@@ -3160,6 +3336,7 @@
                     </div>
                 </div>
             `;
+            
             this.messagesDiv.appendChild(typing);
             this.scrollToBottom();
         }
@@ -3202,7 +3379,7 @@
                 // First request: Uses locale from URL (extracted when chat icon was clicked)
                 // Subsequent requests: Uses locale from backend response (updated in handleResponse)
                 if (!data.locale) {
-                    data.locale = this.state.locale || 'en'; // Fallback to 'en' if somehow not set
+                    data.locale = this.state.locale || ''; // STRICT: Use locale from URL only, no fallback
                 }
                 
                 // Validate required fields
@@ -3212,18 +3389,14 @@
                 
                 // For Step 1 (send_user_types), only send step and session_id
                 if (data.step === 'send_user_types') {
-                    // ALWAYS include session_id - prioritize state over explicitly passed empty string
-                    // Get from: provided value (if truthy) -> state -> sessionStorage -> empty string
                     const sessionId = (data.session_id && data.session_id.trim() !== '') 
                         ? data.session_id 
                         : (this.state.session_id || this.getSessionId() || '');
                     const requestBody = {
                         step: 'send_user_types',
                         session_id: sessionId,
-                        locale: this.state.locale || 'en' // Use stored locale, fallback to 'en'
+                        locale: this.state.locale || ''
                     };
-                    
-                    console.log('📤 Step 1 Request:', JSON.stringify(requestBody, null, 2));
                     
                     const response = await fetch(this.config.webhookUrl, {
                         method: 'POST',
@@ -3251,13 +3424,10 @@
                     return parsedResponse;
                 }
                 
-                // For all other steps, ALWAYS ensure session_id is included
-                // Get from: provided value -> state -> sessionStorage -> empty string
+                // For all other steps, ensure session_id is included
                 if (!data.session_id) {
                     data.session_id = this.state.session_id || this.getSessionId() || '';
                 }
-                
-                console.log('📤 Request:', JSON.stringify(data, null, 2));
                 
                 const response = await fetch(this.config.webhookUrl, {
                     method: 'POST',
@@ -3493,7 +3663,7 @@
                     step: 'send_concern_categories',
                     user_type: option.id,
                     session_id: this.state.session_id || '',
-                    locale: this.state.locale || 'en'
+                    locale: this.state.locale || ''
                 };
                 this.state.user_type = option.id;
                 this.state.currentStep = 'send_concern_categories';
@@ -3506,7 +3676,7 @@
                         user_type: this.state.user_type,
                         concern_category: option.id,
                         session_id: this.state.session_id || '',
-                        locale: this.state.locale || 'en'
+                        locale: this.state.locale || ''
                     };
                     this.state.concern_category = option.id;
                     this.state.currentStep = 'send_top_questions';
@@ -3520,7 +3690,7 @@
                         user_type: this.state.user_type,
                         concern_category: 'something_else',
                         session_id: this.state.session_id || '',
-                        locale: this.state.locale || 'en'
+                        locale: this.state.locale || ''
                     };
                     this.state.concern_category = 'something_else';
                     this.state.question = '';
@@ -3535,7 +3705,7 @@
                             concern_category: this.state.concern_category,
                             question: option.option_value,
                             session_id: this.state.session_id || '',
-                            locale: this.state.locale || 'en'
+                            locale: this.state.locale || ''
                         };
                         this.state.question = option.option_value;
                         this.state.currentStep = option.next_step;
@@ -3547,7 +3717,7 @@
                         concern_category: this.state.concern_category,
                         question: option.option_value,
                         session_id: this.state.session_id || '',
-                        locale: this.state.locale || 'en'
+                        locale: this.state.locale || ''
                     };
                     this.state.question = option.option_value;
                     this.state.currentStep = 'send_query_answer';
@@ -3566,7 +3736,7 @@
                         step: nextStep,
                         user_type: this.state.user_type,
                         session_id: this.state.session_id || '',
-                        locale: this.state.locale || 'en'
+                        locale: this.state.locale || ''
                         // Don't send concern_category or question (reset for new question)
                     };
                     this.state.currentStep = nextStep;
@@ -3578,7 +3748,7 @@
                         concern_category: this.state.concern_category || '',
                         question: this.state.question || '',
                         session_id: this.state.session_id || '',
-                        locale: this.state.locale || 'en'
+                        locale: this.state.locale || ''
                     };
                     this.state.currentStep = nextStep;
                 } else if (nextStep === 'send_rating') {
@@ -3589,7 +3759,7 @@
                         concern_category: this.state.concern_category || '',
                         question: this.state.question || '',
                         session_id: this.state.session_id || '',
-                        locale: this.state.locale || 'en'
+                        locale: this.state.locale || ''
                         // rating_enabled is determined by backend from database
                     };
                     this.state.currentStep = nextStep;
@@ -3601,7 +3771,7 @@
                         concern_category: this.state.concern_category || '',
                         question: this.state.question || '',
                         session_id: this.state.session_id || '',
-                        locale: this.state.locale || 'en'
+                        locale: this.state.locale || ''
                     };
                     this.state.currentStep = nextStep;
                 }
@@ -3618,7 +3788,7 @@
                         step: nextStep,
                         user_type: this.state.user_type,
                         session_id: this.state.session_id || '',
-                        locale: this.state.locale || 'en'
+                        locale: this.state.locale || ''
                         // Don't send concern_category or question (reset for new question)
                     };
                     this.state.currentStep = nextStep;
@@ -3630,7 +3800,7 @@
                         concern_category: this.state.concern_category || '',
                         question: this.state.question || '',
                         session_id: this.state.session_id || '',
-                        locale: this.state.locale || 'en'
+                        locale: this.state.locale || ''
                     };
                     this.state.currentStep = nextStep;
                 } else {
@@ -3641,7 +3811,7 @@
                         concern_category: this.state.concern_category || '',
                         question: this.state.question || '',
                         session_id: this.state.session_id || '',
-                        locale: this.state.locale || 'en'
+                        locale: this.state.locale || ''
                     };
                     this.state.currentStep = nextStep;
                 }
@@ -3701,7 +3871,7 @@
                     step: 'send_concern_categories',
                     user_type: this.state.user_type,  // ✅ Preserved (same user)
                     session_id: this.state.session_id || '',  // ✅ Preserved (same session)
-                    locale: this.state.locale || 'en'
+                    locale: this.state.locale || ''
                     // concern_category: NOT SENT (reset for new question)
                     // question: NOT SENT (reset for new question)
                 };
@@ -3718,7 +3888,7 @@
                     user_type: this.state.user_type || '',
                     concern_category: this.state.concern_category || '',
                     question: this.state.question || '',
-                    locale: this.state.locale || 'en'
+                    locale: this.state.locale || ''
                 };
                 this.state.currentStep = 'send_ai_disclaimer';
                 
@@ -3754,7 +3924,7 @@
                 concern_category: this.state.concern_category,
                 question: question,
                 session_id: this.state.session_id || '',
-                locale: this.state.locale || 'en'
+                locale: this.state.locale || ''
             });
 
             if (response) {
@@ -3792,40 +3962,30 @@
         handleResponse(response) {
             // Special handling for starting disclaimer step
             if (response.step === 'send_ai_starting_disclaimer') {
-                console.log('📋 Processing send_ai_starting_disclaimer response:', response);
-                
-                // Clear any loading messages before showing disclaimer
+                this.removeTypingIndicator();
                 this.messagesDiv.innerHTML = '';
                 
-                // Save locale from backend response (after first request, use backend locale)
-                // Always use backend locale if provided (backend should echo back the locale it received)
-                // Only preserve URL locale if backend doesn't return locale at all
+                // Update locale from backend response if provided
                 if (response.locale && response.locale.trim() !== '') {
-                    const previousLocale = this.state.locale;
                     this.state.locale = response.locale;
-                    console.log('🌍 Locale updated from backend response:', response.locale, '(was:', previousLocale + ')');
-                } else {
-                    // Backend didn't return locale - preserve original URL locale
-                    console.log('🌍 Backend did not return locale, preserving original URL locale:', this.state.locale);
                 }
                 
                 // Show disclaimer with embedded links
                 if (response.message && response.message.trim() !== '') {
                     this.showStartingDisclaimer(response);
                 }
-                // Clear footer loading message and show "Start Chat" button only after disclaimer is received
-                console.log('✅ Showing Start Chat button');
-                this.footerDiv.innerHTML = `
-                    <button class="chatbot-lg-start-btn" id="chatbot-lg-start">Start Chat</button>
-                `;
-                const startButton = this.widget.querySelector('#chatbot-lg-start');
-                if (startButton) {
-                    startButton.addEventListener('click', () => this.startChat());
-                    console.log('✅ Start Chat button created and event listener attached');
-                } else {
-                    console.error('❌ Failed to find Start Chat button element');
+                
+                // Show "Start Chat" button after response is received
+                if (this.footerDiv) {
+                    this.footerDiv.innerHTML = `
+                        <button class="chatbot-lg-start-btn" id="chatbot-lg-start">Start Chat</button>
+                    `;
+                    const startButton = this.widget.querySelector('#chatbot-lg-start');
+                    if (startButton) {
+                        startButton.addEventListener('click', () => this.startChat());
+                    }
                 }
-                return; // Don't process as regular message
+                return;
             }
             
             // Save session_id from backend response
@@ -3834,17 +3994,9 @@
                 this.state.session_id = response.session_id; // Also update state
             }
 
-            // Save locale from backend response (after first request, use backend locale)
-            // First request uses locale from URL, all subsequent requests use locale from backend
-            // Always use backend locale if provided (backend should echo back the locale it received)
-            // Only preserve URL locale if backend doesn't return locale at all
+            // Update locale from backend response if provided
             if (response.locale && response.locale.trim() !== '') {
-                const previousLocale = this.state.locale;
                 this.state.locale = response.locale;
-                console.log('🌍 Locale updated from backend response:', response.locale, '(was:', previousLocale + ')');
-            } else {
-                // Backend didn't return locale - preserve original URL locale
-                console.log('🌍 Backend did not return locale, preserving original URL locale:', this.state.locale);
             }
 
             // Use the step name from backend response (matches the switch node branch that processed it)
@@ -3859,25 +4011,9 @@
             // If rating step, don't save options as regular options (they're feedback options for rating UI)
             const optionsToStore = (!isRatingStep && response.options && response.options.length > 0) ? response.options : null;
             
-            // Display messages and answers exactly as sent from backend (no filtering)
-            // Backend is responsible for sending clean, properly formatted messages
+            // Display messages and answers exactly as sent from backend
             if (response.message && response.message.trim() !== '') {
-                // Debug: Log message for send_top_questions step
-                if (response.step === 'send_top_questions') {
-                    console.log('📋 send_top_questions - Message received:', response.message);
-                    console.log('📋 send_top_questions - Message length:', response.message.length);
-                    console.log('📋 send_top_questions - Adding message to UI');
-                }
-                // Store options with the message if they exist (but not if rating is enabled)
-                // Rating UI will be saved separately via updateLastCachedMessageRatingFlag
                 this.addMessage(response.message, true, true, optionsToStore);
-            } else if (response.step === 'send_top_questions') {
-                // Debug: Warn if message is missing or empty for send_top_questions
-                console.warn('⚠️ send_top_questions - No message or empty message in response!', {
-                    hasMessage: !!response.message,
-                    messageValue: response.message,
-                    fullResponse: response
-                });
             }
             if (response.answer) {
                 // Store options with the answer if they exist (and message didn't have them)
@@ -3919,21 +4055,11 @@
             }
 
             // Add rating UI if step is send_rating
-            // When step is send_rating, options contains feedback options (not action buttons)
             if (response.step === 'send_rating') {
-                // Add rating UI under the last bot message with feedback options from backend
-                // Debug: Log what we're receiving
-                console.log('📊 Rating step detected. Feedback options received:', response.options);
                 this.addRatingUI(response.options || [], response.rating_message || null);
-                
-                // Update the last cached message to include rating step flag
-                // This allows us to restore rating UI when cache is loaded
                 this.updateLastCachedMessageRatingFlag(true, response.options || [], response.rating_message || null);
-            } else {
-                // When not rating step, options are regular action buttons
-            if (response.options && response.options.length > 0) {
+            } else if (response.options && response.options.length > 0) {
                 this.addOptions(response.options);
-                }
             }
 
             this.scrollToBottom();
@@ -4300,7 +4426,7 @@
                     user_type: this.state.user_type || '',
                     concern_category: this.state.concern_category || '',
                     question: this.state.question || '',
-                    locale: this.state.locale || 'en'
+                    locale: this.state.locale || ''
                 });
 
                 // Keep rating UI visible after submission (don't hide it)
