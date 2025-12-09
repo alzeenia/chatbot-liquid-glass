@@ -24,8 +24,45 @@
  * </script>
  */
 
-(function() {
+(function(window, document) {
     'use strict';
+
+    // Ensure DOM is ready before initializing (WordPress compatibility)
+    // This allows the script to be loaded in footer and initialized immediately
+    function domReady(fn) {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', fn);
+        } else {
+            fn();
+        }
+    }
+    
+    /**
+     * Detects if the script is running on WordPress
+     * 
+     * @returns {boolean} True if WordPress is detected
+     */
+    function isWordPress() {
+        // Check for WordPress-specific globals or elements
+        return !!(window.wp || 
+                  window.wpApiSettings || 
+                  document.querySelector('link[href*="wp-content"]') ||
+                  document.querySelector('script[src*="wp-includes"]') ||
+                  document.querySelector('script[src*="wp-content"]') ||
+                  (document.body && document.body.classList.toString().includes('wp-')));
+    }
+    
+    /**
+     * Gets the WordPress REST API proxy URL
+     * 
+     * @returns {string} The WordPress proxy endpoint URL
+     */
+    function getWordPressProxyUrl() {
+        // Use the WordPress REST API proxy endpoint
+        // This matches the proxy plugin route: /wp-json/tdpb-chatbot/proxy
+        const baseUrl = window.location.origin;
+        return baseUrl + '/wp-json/tdpb-chatbot/proxy';
+    }
 
     /**
      * Default configuration values for the chatbot widget
@@ -67,9 +104,18 @@
          * @throws {Error} If webhookUrl is missing or empty
          */
         constructor(config) {
-            // Validate required configuration
+            // Auto-detect WordPress and use proxy if webhookUrl not provided
             if (!config || !config.webhookUrl || config.webhookUrl.trim() === '') {
-                throw new Error('ChatbotLiquidGlass: webhookUrl is required.');
+                if (isWordPress()) {
+                    // WordPress detected - use the proxy endpoint
+                    const proxyUrl = getWordPressProxyUrl();
+                    console.log('🌐 WordPress detected - using proxy endpoint:', proxyUrl);
+                    config = config || {};
+                    config.webhookUrl = proxyUrl;
+                } else {
+                    // Not WordPress and no webhookUrl provided
+                    throw new Error('ChatbotLiquidGlass: webhookUrl is required. On WordPress, the proxy endpoint will be used automatically.');
+                }
             }
 
             // Merge user config with defaults
@@ -82,7 +128,9 @@
                 session_id: '',          // Backend-generated session identifier
                 user_type: '',           // Selected user type (customer, partner, etc.)
                 concern_category: '',     // Selected concern category
-                question: ''              // User's question or selected question
+                question: '',             // User's question or selected question
+                askAnotherConfirmation: false,  // Flag to track if we're showing "Ask another question" Yes/No confirmation
+                locale: ''  // Locale will be extracted ONCE when chat icon is clicked, then used for all steps
             };
             
             // UI state flags
@@ -177,7 +225,7 @@
          * @param {string|null} step - Optional: The conversation step when message was sent
          * @param {Array|null} options - Optional: Options array to store with the message
          */
-        saveMessageToCache(text, isBot, step = null, options = null, ratingEnabled = false) {
+        saveMessageToCache(text, isBot, step = null, options = null) {
             const cacheKey = this.getCacheKey();
             if (!cacheKey) return; // No session_id means no caching
             
@@ -198,9 +246,8 @@
                     concern_category: this.state.concern_category,
                     question: this.state.question,
                     // Store options if provided (for bot messages that have options)
-                    options: options || null,
-                    // Store rating_enabled flag to restore rating UI
-                    rating_enabled: ratingEnabled || false
+                    options: options || null
+                    // Step name is already stored above, which determines if rating UI should be shown
                 });
                 
                 // Keep only the last 100 messages to prevent storage bloat
@@ -213,12 +260,13 @@
         }
         
         /**
-         * Updates the last cached message to include rating_enabled flag and feedback options
+         * Updates the last cached message to include feedback options for rating UI
          * 
-         * @param {boolean} ratingEnabled - Whether rating UI should be shown
+         * @param {boolean} ratingEnabled - Whether rating UI should be shown (kept for compatibility, but step name is used)
          * @param {Array} feedbackOptions - Array of feedback options for rating UI
+         * @param {string} ratingMessage - Optional rating message/label
          */
-        updateLastCachedMessageRatingFlag(ratingEnabled, feedbackOptions = []) {
+        updateLastCachedMessageRatingFlag(ratingEnabled, feedbackOptions = [], ratingMessage = null) {
             const cacheKey = this.getCacheKey();
             if (!cacheKey) return;
             
@@ -226,17 +274,87 @@
                 const cached = JSON.parse(localStorage.getItem(cacheKey) || '[]');
                 if (cached.length === 0) return;
                 
-                // Update the last message with rating_enabled flag and feedback options
+                // Update the last message with feedback options
+                // Step name is already stored in msg.step, which determines if rating UI should be shown
                 const lastMsg = cached[cached.length - 1];
-                lastMsg.rating_enabled = ratingEnabled;
                 // Store feedback options separately (they're different from regular options)
                 if (ratingEnabled && feedbackOptions.length > 0) {
                     lastMsg.feedback_options = feedbackOptions;
+                }
+                // Store rating message for cache restoration
+                if (ratingMessage !== null) {
+                    lastMsg.rating_message = ratingMessage;
                 }
                 
                 localStorage.setItem(cacheKey, JSON.stringify(cached));
             } catch (error) {
                 console.warn('Failed to update cached message rating flag:', error);
+            }
+        }
+        
+        /**
+         * Extracts locale from the browser URL
+         * 
+         * Supports multiple WordPress locale patterns:
+         * - Path-based: /en/page, /fr/page, /de/page
+         * - Query parameter: ?lang=en, ?locale=fr
+         * - Subdomain: en.example.com, fr.example.com
+         * 
+         * @returns {string} Locale code (e.g., 'en', 'fr', 'de') or 'en' as default
+         */
+        getLocaleFromURL() {
+            try {
+                const url = window.location.href;
+                const pathname = window.location.pathname;
+                const searchParams = new URLSearchParams(window.location.search);
+                
+                // 1. Check path-based locale (e.g., /en/page, /fr/page)
+                // WordPress often uses 2-letter language codes in the path
+                const pathMatch = pathname.match(/^\/([a-z]{2})(?:\/|$)/i);
+                if (pathMatch) {
+                    const locale = pathMatch[1].toLowerCase();
+                    // Common language codes
+                    const validLocales = ['en', 'fr', 'de', 'es', 'it', 'pt', 'nl', 'pl', 'ru', 'ja', 'zh', 'ar', 'hi', 'ko'];
+                    if (validLocales.includes(locale)) {
+                        return locale;
+                    }
+                }
+                
+                // 2. Check query parameters (e.g., ?lang=en, ?locale=fr)
+                const langParam = searchParams.get('lang') || searchParams.get('locale') || searchParams.get('language');
+                if (langParam) {
+                    // Extract 2-letter code if full locale (e.g., 'en-US' -> 'en')
+                    const locale = langParam.toLowerCase().split('-')[0];
+                    if (locale.length === 2) {
+                        return locale;
+                    }
+                }
+                
+                // 3. Check subdomain (e.g., en.example.com, fr.example.com)
+                const hostname = window.location.hostname;
+                const subdomainMatch = hostname.match(/^([a-z]{2})\./i);
+                if (subdomainMatch) {
+                    const locale = subdomainMatch[1].toLowerCase();
+                    const validLocales = ['en', 'fr', 'de', 'es', 'it', 'pt', 'nl', 'pl', 'ru', 'ja', 'zh', 'ar', 'hi', 'ko'];
+                    if (validLocales.includes(locale)) {
+                        return locale;
+                    }
+                }
+                
+                // 4. Check HTML lang attribute as fallback
+                const htmlLang = document.documentElement.lang;
+                if (htmlLang) {
+                    const locale = htmlLang.toLowerCase().split('-')[0];
+                    if (locale.length === 2) {
+                        return locale;
+                    }
+                }
+                
+                // Default to 'en' if no locale found
+                return 'en';
+            } catch (error) {
+                console.warn('Error extracting locale from URL:', error);
+                return 'en'; // Default fallback
             }
         }
         
@@ -307,11 +425,11 @@
                 const container = this.addMessage(msg.text, msg.isBot, false);
                 
                 // Check if this message should have rating UI (not regular options)
-                // Handle both boolean true and string "true" from cache
-                if ((msg.rating_enabled === true || msg.rating_enabled === 'true') && msg.feedback_options && Array.isArray(msg.feedback_options) && msg.feedback_options.length > 0) {
+                // Check by step name (send_rating step shows rating UI)
+                if (msg.step === 'send_rating' && msg.feedback_options && Array.isArray(msg.feedback_options) && msg.feedback_options.length > 0) {
                     // Restore rating UI instead of regular options
-                    // This is for the "redirect_to_human_support" step
-                    this.addRatingUI(msg.feedback_options);
+                    // This is for the "send_rating" step
+                    this.addRatingUI(msg.feedback_options, msg.rating_message || null);
                 } else if (msg.options && Array.isArray(msg.options) && msg.options.length > 0) {
                     // Restore regular options (not rating UI)
                     // Options are restored AFTER state is set, so they have correct context
@@ -581,6 +699,9 @@
                     flex-direction: column;
                     overflow: hidden;
                     animation: glassSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+                    box-sizing: border-box;
+                    max-width: calc(100vw - 40px);
+                    max-height: calc(100vh - 40px);
                 }
                 
                 @keyframes glassSlideIn {
@@ -606,6 +727,10 @@
                     justify-content: space-between;
                     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05),
                                 inset 0 1px 0 rgba(255, 255, 255, 0.1);
+                    box-sizing: border-box;
+                    width: 100%;
+                    min-width: 0;
+                    flex-shrink: 0;
                 }
                 
                 .chatbot-lg-header-content {
@@ -727,6 +852,9 @@
                     backdrop-filter: blur(20px);
                     -webkit-backdrop-filter: blur(20px);
                     scroll-behavior: smooth;
+                    box-sizing: border-box;
+                    width: 100%;
+                    min-width: 0;
                 }
                 
                 .chatbot-lg-messages::-webkit-scrollbar {
@@ -798,6 +926,7 @@
                     padding: 10px 14px;
                     border-radius: 18px;
                     word-wrap: break-word;
+                    overflow-wrap: break-word;
                     white-space: pre-wrap;
                     line-height: 1.5;
                     font-size: 14px;
@@ -807,6 +936,8 @@
                                 inset 0 1px 0 rgba(255, 255, 255, 0.5);
                     border: 1px solid rgba(255, 255, 255, 0.3);
                     pointer-events: auto;
+                    box-sizing: border-box;
+                    min-width: 0;
                 }
                 
                 .chatbot-lg-message.bot .chatbot-lg-message-bubble {
@@ -969,6 +1100,15 @@
                     cursor: not-allowed;
                 }
                 
+                .chatbot-lg-option-label {
+                    font-size: 13px;
+                    font-weight: 600;
+                    color: #333;
+                    margin: 12px 0 8px 0;
+                    padding: 0;
+                    grid-column: 1 / -1; /* Span all columns */
+                }
+                
                 /* Footer - Glass Effect */
                 .chatbot-lg-footer {
                     padding: 18px 24px;
@@ -978,6 +1118,10 @@
                     border-top: 1px solid rgba(255, 255, 255, 0.3);
                     box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.05),
                                 inset 0 1px 0 rgba(255, 255, 255, 0.5);
+                    box-sizing: border-box;
+                    width: 100%;
+                    min-width: 0;
+                    flex-shrink: 0;
                 }
                 
                 .chatbot-lg-input-wrapper {
@@ -1161,12 +1305,18 @@
                 @media (max-width: 768px) {
                     #chatbot-lg-widget {
                         width: calc(100vw - 24px);
-                        max-width: 420px;
+                        max-width: calc(100vw - 24px);
+                        width: min(calc(100vw - 24px), 420px);
                         height: calc(100vh - 100px);
-                        max-height: 600px;
+                        max-height: calc(100vh - 100px);
                         min-height: 500px;
                         border-radius: 20px;
                         margin: 50px 12px 12px 12px;
+                        left: auto;
+                        right: auto;
+                        position: fixed;
+                        top: 50px;
+                        bottom: auto;
                     }
                     
                     #chatbot-lg-toggle {
@@ -1270,6 +1420,9 @@
                     
                     .chatbot-lg-rating-container {
                         padding: 14px;
+                        width: 100%;
+                        box-sizing: border-box;
+                        max-width: 100%;
                     }
                     
                     .chatbot-lg-star {
@@ -1280,6 +1433,15 @@
                         padding: 12px 14px;
                         font-size: 14px;
                         min-height: 44px; /* iOS touch target minimum */
+                        width: 100%;
+                        box-sizing: border-box;
+                    }
+                    
+                    .chatbot-lg-feedback-input {
+                        width: 100%;
+                        box-sizing: border-box;
+                        padding: 10px 12px;
+                        font-size: 16px; /* Prevents zoom on iOS */
                     }
                 }
                 
@@ -1287,12 +1449,18 @@
                 @media (max-width: 428px) {
                     #chatbot-lg-widget {
                         width: calc(100vw - 16px);
-                        max-width: 100%;
+                        max-width: calc(100vw - 16px);
                         height: calc(100vh - 80px);
-                        max-height: 580px;
+                        max-height: calc(100vh - 80px);
                         min-height: 450px;
                         margin: 40px 8px 8px 8px;
                         border-radius: 18px;
+                        left: auto;
+                        right: auto;
+                        position: fixed;
+                        top: 40px;
+                        bottom: auto;
+                        box-sizing: border-box;
                     }
                     
                     #chatbot-lg-toggle {
@@ -1395,6 +1563,9 @@
                     
                     .chatbot-lg-rating-container {
                         padding: 12px;
+                        width: 100%;
+                        box-sizing: border-box;
+                        max-width: 100%;
                     }
                     
                     .chatbot-lg-rating-label {
@@ -1409,6 +1580,15 @@
                         padding: 10px 12px;
                         font-size: 13px;
                         min-height: 44px;
+                        width: 100%;
+                        box-sizing: border-box;
+                    }
+                    
+                    .chatbot-lg-feedback-input {
+                        width: 100%;
+                        box-sizing: border-box;
+                        padding: 10px 12px;
+                        font-size: 16px; /* Prevents zoom on iOS */
                     }
                 }
                 
@@ -1416,10 +1596,17 @@
                 @media (max-width: 768px) and (orientation: landscape) {
                     #chatbot-lg-widget {
                         width: calc(100vw - 24px);
+                        max-width: calc(100vw - 24px);
                         height: calc(100vh - 60px);
-                        max-height: 500px;
+                        max-height: calc(100vh - 60px);
                         min-height: 400px;
                         margin: 30px 12px 12px 12px;
+                        left: auto;
+                        right: auto;
+                        position: fixed;
+                        top: 30px;
+                        bottom: auto;
+                        box-sizing: border-box;
                     }
                     
                     .chatbot-lg-header {
@@ -1465,6 +1652,16 @@
                     
                     .chatbot-lg-rating-container {
                         padding: 12px;
+                        width: 100%;
+                        box-sizing: border-box;
+                        max-width: 100%;
+                    }
+                    
+                    .chatbot-lg-feedback-input {
+                        width: 100%;
+                        box-sizing: border-box;
+                        padding: 10px 12px;
+                        font-size: 16px; /* Prevents zoom on iOS */
                     }
                 }
                 
@@ -1472,9 +1669,16 @@
                 @media (max-width: 375px) {
                     #chatbot-lg-widget {
                         width: calc(100vw - 12px);
+                        max-width: calc(100vw - 12px);
                         margin: 30px 6px 6px 6px;
                         border-radius: 16px;
                         min-height: 400px;
+                        left: auto;
+                        right: auto;
+                        position: fixed;
+                        top: 30px;
+                        bottom: auto;
+                        box-sizing: border-box;
                     }
                     
                     #chatbot-lg-toggle {
@@ -1551,20 +1755,67 @@
                     }
                 }
                 
+                /* iPhone 15 Pro and similar devices (393px width) */
+                @media (max-width: 393px) {
+                    #chatbot-lg-widget {
+                        width: calc(100vw - 16px);
+                        max-width: calc(100vw - 16px);
+                        left: 8px;
+                        right: 8px;
+                        margin: 0;
+                        position: fixed;
+                        top: max(40px, env(safe-area-inset-top, 40px));
+                        bottom: max(8px, env(safe-area-inset-bottom, 8px));
+                        height: calc(100vh - max(40px, env(safe-area-inset-top, 40px)) - max(8px, env(safe-area-inset-bottom, 8px)));
+                        max-height: calc(100vh - max(40px, env(safe-area-inset-top, 40px)) - max(8px, env(safe-area-inset-bottom, 8px)));
+                        box-sizing: border-box;
+                    }
+                    
+                    .chatbot-lg-messages {
+                        padding: 12px;
+                        box-sizing: border-box;
+                    }
+                    
+                    .chatbot-lg-rating-container {
+                        padding: 12px;
+                        width: 100%;
+                        box-sizing: border-box;
+                        margin-left: 0;
+                        margin-right: 0;
+                    }
+                    
+                    .chatbot-lg-feedback-input {
+                        width: 100%;
+                        box-sizing: border-box;
+                        padding: 10px 12px;
+                    }
+                }
+                
                 /* Safe area support for notched devices (iPhone X and newer) */
                 @supports (padding: max(0px)) {
                     @media (max-width: 768px) {
                         #chatbot-lg-widget {
                             margin-top: max(50px, env(safe-area-inset-top, 50px));
                             margin-bottom: max(12px, env(safe-area-inset-bottom, 12px));
+                            left: max(12px, env(safe-area-inset-left, 12px));
+                            right: max(12px, env(safe-area-inset-right, 12px));
                         }
                         
                         .chatbot-lg-header {
                             padding-top: max(14px, env(safe-area-inset-top, 14px));
+                            padding-left: max(16px, env(safe-area-inset-left, 16px));
+                            padding-right: max(16px, env(safe-area-inset-right, 16px));
                         }
                         
                         .chatbot-lg-footer {
                             padding-bottom: max(14px, env(safe-area-inset-bottom, 14px));
+                            padding-left: max(16px, env(safe-area-inset-left, 16px));
+                            padding-right: max(16px, env(safe-area-inset-right, 16px));
+                        }
+                        
+                        .chatbot-lg-messages {
+                            padding-left: max(14px, env(safe-area-inset-left, 14px));
+                            padding-right: max(14px, env(safe-area-inset-right, 14px));
                         }
                     }
                 }
@@ -1579,9 +1830,11 @@
                     border-radius: 12px;
                     border: 1px solid rgba(0, 183, 176, 0.2);
                     max-width: 100%;
+                    width: 100%;
                     box-sizing: border-box;
-                    overflow: hidden;
+                    overflow: visible;
                     word-wrap: break-word;
+                    overflow-wrap: break-word;
                 }
                 
                 .chatbot-lg-stars-container {
@@ -1629,7 +1882,9 @@
                     flex-direction: column;
                     gap: 10px;
                     max-width: 100%;
+                    width: 100%;
                     box-sizing: border-box;
+                    overflow: visible;
                 }
                 
                 .chatbot-lg-feedback-label {
@@ -1660,9 +1915,11 @@
                     font-size: 13px;
                     color: #003D46;
                     max-width: 100%;
+                    width: 100%;
                     box-sizing: border-box;
                     word-wrap: break-word;
                     overflow-wrap: break-word;
+                    min-width: 0;
                 }
                 
                 .chatbot-lg-feedback-option span {
@@ -1716,6 +1973,12 @@
                     resize: vertical;
                     outline: none;
                     transition: all 0.3s;
+                    box-sizing: border-box;
+                    min-width: 0;
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    overflow-x: hidden;
+                    overflow-y: auto;
                 }
                 
                 .chatbot-lg-feedback-input:focus {
@@ -1851,7 +2114,7 @@
                 </div>
                 <div class="chatbot-lg-messages" id="chatbot-lg-messages"></div>
                 <div class="chatbot-lg-footer" id="chatbot-lg-footer">
-                    <button class="chatbot-lg-start-btn" id="chatbot-lg-start">Start Chat</button>
+                    <!-- Start Chat button will be shown after send_ai_starting_disclaimer response -->
                 </div>
             `;
 
@@ -1901,7 +2164,7 @@
             this.widget.querySelector('#chatbot-lg-human-support').addEventListener('click', () => {
                 window.open('https://www.thedigitalpobox.com/en/contact/', '_blank');
             });
-            this.widget.querySelector('#chatbot-lg-start').addEventListener('click', () => this.startChat());
+            // Note: "Start Chat" button event listener is attached dynamically when disclaimer response is received
             
             // Load custom avatar image with fallback
             this.loadHeaderAvatar();
@@ -1961,9 +2224,61 @@
          * Automatically restores cached conversation if available.
          */
         async open() {
+            // Safety check: ensure widget and key elements exist
+            if (!this.widget) {
+                console.error('❌ Widget not initialized. Cannot open.');
+                return;
+            }
+            
+            if (!this.messagesDiv) {
+                console.error('❌ messagesDiv not found. Re-initializing...');
+                this.messagesDiv = this.widget.querySelector('#chatbot-lg-messages');
+                if (!this.messagesDiv) {
+                    console.error('❌ Cannot find #chatbot-lg-messages element');
+                    return;
+                }
+            }
+            
+            if (!this.footerDiv) {
+                console.error('❌ footerDiv not found. Re-initializing...');
+                this.footerDiv = this.widget.querySelector('#chatbot-lg-footer');
+                if (!this.footerDiv) {
+                    console.error('❌ Cannot find #chatbot-lg-footer element');
+                    return;
+                }
+            }
+            
             this.widget.style.display = 'flex';
             this.toggle.style.display = 'none';
             this.isOpen = true;
+            
+            console.log('✅ Widget opened. MessagesDiv children:', this.messagesDiv.children.length);
+            
+            // Capture URL context when chat icon is clicked
+            const currentUrl = window.location.href;      // full URL
+            const path = window.location.pathname;          // just the path
+            const query = window.location.search;           // ?lang=en etc
+            
+            // Store globally for later use (as suggested)
+            window.tdpbChatbotContext = {
+                url: currentUrl,
+                path: path,
+                query: query,
+                timestamp: new Date().toISOString()
+            };
+            
+            // Extract locale from URL ONCE when chat icon is clicked
+            // This locale will be used for ALL subsequent steps, even if URL changes
+            // Always extract on first click, then stick to it for entire conversation
+            if (!this.state.locale || this.state.locale === '') {
+                const currentLocale = this.getLocaleFromURL();
+                this.state.locale = currentLocale;
+                console.log('🌍 Locale extracted from URL (will be used for ALL steps):', currentLocale, '| URL:', currentUrl);
+            } else {
+                // Locale already set - keep using the same one (sticky behavior)
+                console.log('🌍 Using existing locale (sticky - same for all steps):', this.state.locale, '| Current URL:', currentUrl, '(URL change ignored)');
+            }
+            console.log('📍 URL Context:', window.tdpbChatbotContext);
             
             // Hide notification badge when widget is opened
             if (this.badge) {
@@ -1984,7 +2299,20 @@
                 if (this.state.currentStep === 'send_ai_disclaimer') {
                     this.showStartOverButton();
                 } else {
-                    this.footerDiv.innerHTML = '';
+                    // Check if disclaimer exists in restored messages
+                    const hasDisclaimer = this.messagesDiv.querySelector('.chatbot-lg-starting-disclaimer') !== null ||
+                                         cachedMessages.some(msg => msg.step === 'send_ai_starting_disclaimer');
+                    
+                    if (hasDisclaimer && this.state.currentStep === 'send_user_types') {
+                        // Disclaimer is shown and we're at the start - show Start Chat button
+                        this.footerDiv.innerHTML = `
+                            <button class="chatbot-lg-start-btn" id="chatbot-lg-start">Start Chat</button>
+                        `;
+                        this.widget.querySelector('#chatbot-lg-start').addEventListener('click', () => this.startChat());
+                    } else {
+                        // No disclaimer or conversation already started - clear footer
+                        this.footerDiv.innerHTML = '';
+                    }
                     
                     // Enable appropriate UI elements based on restored step and state
                     const shouldEnableInput = (this.state.currentStep === 'send_top_questions' && 
@@ -2001,7 +2329,11 @@
                 // Scroll to bottom to show latest messages
                 this.scrollToBottom();
             } else if (this.messagesDiv.children.length === 0) {
-                // Widget is empty - fetch starting disclaimer from backend
+                // Widget is empty - show immediate loading state
+                this.messagesDiv.innerHTML = '<div class="chatbot-lg-message chatbot-lg-bot-message"><div class="chatbot-lg-message-bubble">Loading...</div></div>';
+                
+                // Fetch starting disclaimer from backend
+                // Locale is already extracted above and will be included in the request
                 await this.fetchStartingDisclaimer();
             }
         }
@@ -2014,12 +2346,30 @@
          */
         async fetchStartingDisclaimer() {
             try {
+                // Ensure messagesDiv exists
+                if (!this.messagesDiv) {
+                    console.error('❌ messagesDiv is not initialized');
+                    return;
+                }
+                
+                // Show loading indicator in footer
+                if (this.footerDiv) {
+                    this.footerDiv.innerHTML = '<div style="text-align: center; color: rgba(0, 61, 70, 0.6); padding: 8px; font-size: 13px;">Loading...</div>';
+                }
+                
                 // For send_ai_starting_disclaimer step, ALWAYS send blank session_id
                 // This ensures a fresh session is created
+                // Use the locale from state (extracted when chat icon was clicked)
+                // Do NOT re-extract - stick to the same locale for entire conversation
+                const locale = this.state.locale || 'en'; // Fallback to 'en' if somehow not set
+                
                 const requestBody = {
                     step: 'send_ai_starting_disclaimer',
-                    session_id: ''
+                    session_id: '',
+                    locale: locale
                 };
+                
+                console.log('📤 Sending initial disclaimer request with locale:', locale, 'to:', this.config.webhookUrl);
                 
                 const response = await fetch(this.config.webhookUrl, {
                     method: 'POST',
@@ -2027,12 +2377,19 @@
                     body: JSON.stringify(requestBody)
                 });
                 
+                console.log('📥 Response status:', response.status, response.statusText);
+                
                 if (!response.ok) {
-                    console.warn('Failed to fetch starting disclaimer:', response.status);
+                    const errorText = await response.text();
+                    console.error('❌ Failed to fetch starting disclaimer:', response.status, errorText);
+                    if (this.footerDiv) {
+                        this.footerDiv.innerHTML = '<div style="text-align: center; color: #ff3d3d; padding: 8px; font-size: 13px;">Failed to load. Please try again.</div>';
+                    }
                     return;
                 }
                 
                 const data = await response.json();
+                console.log('📥 Received disclaimer response:', data);
                 
                 // Save session_id from backend response if provided
                 if (data && data.session_id) {
@@ -2040,16 +2397,51 @@
                     this.state.session_id = data.session_id;
                 }
                 
-                // If backend returns a message, display it as a disclaimer banner
-                if (data && data.message && data.message.trim() !== '') {
-                    this.showStartingDisclaimer(data);
-                }
+                // Use handleResponse to process the disclaimer response
+                // This ensures the "Start Chat" button is shown correctly
+                this.handleResponse(data);
+                
+                // Fallback: If handleResponse didn't show button (e.g., step mismatch), show it anyway
+                // This ensures button appears even if response structure is unexpected
+                setTimeout(() => {
+                    const startButton = this.widget.querySelector('#chatbot-lg-start');
+                    if (!startButton && this.messagesDiv.querySelector('.chatbot-lg-starting-disclaimer')) {
+                        console.log('⚠️ Button not shown by handleResponse, showing fallback button');
+                        if (this.footerDiv) {
+                            this.footerDiv.innerHTML = `
+                                <button class="chatbot-lg-start-btn" id="chatbot-lg-start">Start Chat</button>
+                            `;
+                            const btn = this.widget.querySelector('#chatbot-lg-start');
+                            if (btn) {
+                                btn.addEventListener('click', () => this.startChat());
+                            }
+                        }
+                    }
+                }, 100);
             } catch (error) {
-                console.warn('Error fetching starting disclaimer:', error);
-                // Silently fail - don't block user from using chatbot
+                console.error('❌ Error fetching starting disclaimer:', error);
+                if (this.footerDiv) {
+                    this.footerDiv.innerHTML = '<div style="text-align: center; color: #ff3d3d; padding: 8px; font-size: 13px;">Connection error. Please check your network.</div>';
+                }
+                // Show error message in messages area too
+                if (this.messagesDiv) {
+                    this.messagesDiv.innerHTML = '<div class="chatbot-lg-message chatbot-lg-bot-message"><div class="chatbot-lg-message-bubble" style="color: #ff3d3d;">Unable to connect to the chatbot. Please refresh the page and try again.</div></div>';
+                }
             }
         }
         
+        /**
+         * Escapes HTML special characters to prevent XSS
+         * @param {string} text - Text to escape
+         * @returns {string} Escaped text
+         */
+        escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
         /**
          * Displays the starting disclaimer banner at the top of the messages area
          * 
@@ -2235,12 +2627,15 @@
             this.clearMessageCache();
             
             // Reset conversation state to initial values
+            // BUT preserve locale (extracted from URL when chat icon was clicked)
+            const existingLocale = this.state.locale || '';
             this.state = {
                 currentStep: 'send_user_types',
                 session_id: '',  // Blank session_id - backend will generate new one
                 user_type: '',
                 concern_category: '',
-                question: ''
+                question: '',
+                locale: existingLocale // Preserve locale from URL
             };
             
             // Show loading state
@@ -2568,7 +2963,23 @@
             const isCurrentStep = stepForTheseOptions === this.state.currentStep;
             const shouldDisableAllOptions = stepHasSelection && !isCurrentStep;
             
+            // Group options by label: display label once above consecutive options with same label
+            // This handles cases like "Ask another question" above both "Yes" and "No"
+            let previousLabel = null;
+            
             options.forEach(option => {
+                const currentLabel = option.label || null;
+                
+                // Display label only when it changes (new group) or when first option has a label
+                if (currentLabel && currentLabel !== previousLabel) {
+                    const labelDiv = document.createElement('div');
+                    labelDiv.className = 'chatbot-lg-option-label';
+                    labelDiv.textContent = currentLabel;
+                    optionsDiv.appendChild(labelDiv);
+                }
+                
+                previousLabel = currentLabel;
+                
                 const btn = document.createElement('button');
                 btn.className = 'chatbot-lg-option-btn';
                 // Display option_value exactly as sent from backend (Google Sheets)
@@ -2587,7 +2998,7 @@
                     btn.setAttribute('data-selected', 'true');
                 } else {
                     // Only set onclick if not disabled
-                    btn.onclick = () => this.handleOptionClick(option);
+                btn.onclick = () => this.handleOptionClick(option);
                 }
                 
                 optionsDiv.appendChild(btn);
@@ -2786,6 +3197,13 @@
             try {
                 this.addTypingIndicator();
                 
+                // Always include locale in the request data
+                // First request: Uses locale from URL (extracted when chat icon was clicked)
+                // Subsequent requests: Uses locale from backend response (updated in handleResponse)
+                if (!data.locale) {
+                    data.locale = this.state.locale || 'en'; // Fallback to 'en' if somehow not set
+                }
+                
                 // Validate required fields
                 if (!data.step) {
                     throw new Error('Request missing required field: step');
@@ -2800,7 +3218,8 @@
                         : (this.state.session_id || this.getSessionId() || '');
                     const requestBody = {
                         step: 'send_user_types',
-                        session_id: sessionId
+                        session_id: sessionId,
+                        locale: this.state.locale || 'en' // Use stored locale, fallback to 'en'
                     };
                     
                     console.log('📤 Step 1 Request:', JSON.stringify(requestBody, null, 2));
@@ -2860,6 +3279,12 @@
                     parsedResponse = JSON.parse(text);
                 } catch (parseError) {
                     throw new Error(`Invalid JSON response: ${parseError.message}`);
+                }
+                
+                // Handle array responses (n8n sometimes returns arrays)
+                // If response is an array, extract the first element
+                if (Array.isArray(parsedResponse) && parsedResponse.length > 0) {
+                    parsedResponse = parsedResponse[0];
                 }
                 
                 return parsedResponse;
@@ -2961,15 +3386,17 @@
             }
             
             // No cached messages or restoration failed - start new conversation flow
-            // BUT preserve session_id if it was already set from send_ai_starting_disclaimer
+            // BUT preserve session_id and locale if they were already set from send_ai_starting_disclaimer
             const existingSessionId = this.state.session_id || this.getSessionId() || '';
+            const existingLocale = this.state.locale || ''; // Preserve locale from URL (extracted when chat icon was clicked)
             this.clearMessageCache();
             this.state = {
                 currentStep: 'send_user_types',
                 session_id: existingSessionId, // Preserve session_id from disclaimer
                 user_type: '',
                 concern_category: '',
-                question: ''
+                question: '',
+                locale: existingLocale // Preserve locale from URL
             };
 
             this.footerDiv.innerHTML = '<div style="text-align: center; color: rgba(0, 61, 70, 0.6); padding: 8px; font-size: 13px;">Loading...</div>';
@@ -3007,6 +3434,20 @@
          * @param {string} option.option_value - Display text for the option
          */
         async handleOptionClick(option) {
+            // Check if we're handling Yes/No confirmation for "Ask another question"
+            if (this.state.askAnotherConfirmation) {
+                if (option.id === 'ask_another_yes') {
+                    // User clicked "Yes" - proceed with asking another question
+                    this.addMessage('Yes', false);
+                    await this.handleAskAnotherConfirmation('yes');
+                } else if (option.id === 'ask_another_no') {
+                    // User clicked "No" - proceed with AI disclaimer and ratings
+                    this.addMessage('No', false);
+                    await this.handleAskAnotherConfirmation('no');
+                }
+                return; // Exit early, don't process as normal option
+            }
+            
             // Get the step this option belongs to from current state
             // When an option is clicked, we're at the step that shows these options
             const optionStep = this.state.currentStep;
@@ -3108,31 +3549,70 @@
             }
             }
             else if (this.state.currentStep === 'send_query_answer') {
-                // Use next_step from option if provided (backend-controlled routing)
-                // Otherwise, determine step based on option.id for backward compatibility
-                const nextStep = option.next_step || 
-                                (option.id === 'ask_another' ? 'send_concern_categories' : 
-                                 option.id === 'talk_to_human' ? 'redirect_to_human_support' : 
-                                 'send_query_answer');
+                // Use next_step from option (backend-controlled routing)
+                const nextStep = option.next_step || 'send_query_answer';
                 
                 // Build request data based on next step
                 if (nextStep === 'send_concern_categories') {
                     // "Ask another question" - Start new question flow
-                    // ✅ PRESERVE SESSION: session_id, user_type
-                    // 🔄 RESET QUESTION FLOW: Don't send concern_category or question
-                    // Backend will detect missing fields and return fresh categories
+                    // Preserve session_id and user_type, reset concern_category and question
                     requestData = {
                         step: nextStep,
-                        user_type: this.state.user_type,  // ✅ Preserved (same user)
-                        session_id: this.state.session_id || ''  // ✅ Preserved (same session)
-                        // concern_category: NOT SENT (reset for new question)
-                        // question: NOT SENT (reset for new question)
+                        user_type: this.state.user_type,
+                        session_id: this.state.session_id || ''
+                        // Don't send concern_category or question (reset for new question)
                     };
-                    // Update frontend state for new question flow
-                    // Note: We don't clear concern_category/question here - they'll be set when user selects/asks
                     this.state.currentStep = nextStep;
                 } else if (nextStep === 'redirect_to_human_support') {
                     // "Talk to Human" - Include current question context
+                    requestData = {
+                        step: nextStep,
+                        user_type: this.state.user_type,
+                        concern_category: this.state.concern_category || '',
+                        question: this.state.question || '',
+                        session_id: this.state.session_id || ''
+                    };
+                    this.state.currentStep = nextStep;
+                } else if (nextStep === 'send_rating') {
+                    // "End Chat" - Go to rating step
+                    requestData = {
+                        step: nextStep,
+                        user_type: this.state.user_type,
+                        concern_category: this.state.concern_category || '',
+                        question: this.state.question || '',
+                        session_id: this.state.session_id || ''
+                        // rating_enabled is determined by backend from database
+                    };
+                    this.state.currentStep = nextStep;
+                } else {
+                    // Default: Continue with current question context
+                    requestData = {
+                        step: nextStep,
+                        user_type: this.state.user_type,
+                        concern_category: this.state.concern_category || '',
+                        question: this.state.question || '',
+                        session_id: this.state.session_id || ''
+                    };
+                    this.state.currentStep = nextStep;
+                }
+            }
+            else if (this.state.currentStep === 'redirect_to_human_support') {
+                // Use next_step from option (backend-controlled routing)
+                const nextStep = option.next_step || 'redirect_to_human_support';
+                
+                // Build request data based on next step
+                if (nextStep === 'send_concern_categories') {
+                    // "Ask another question" - Start new question flow
+                    // Preserve session_id and user_type, reset concern_category and question
+                    requestData = {
+                        step: nextStep,
+                        user_type: this.state.user_type,
+                        session_id: this.state.session_id || ''
+                        // Don't send concern_category or question (reset for new question)
+                    };
+                    this.state.currentStep = nextStep;
+                } else if (nextStep === 'send_rating') {
+                    // "End Chat" - Go to rating step
                     requestData = {
                         step: nextStep,
                         user_type: this.state.user_type,
@@ -3152,11 +3632,81 @@
                     };
                     this.state.currentStep = nextStep;
                 }
-                
-                // Rating UI will be added in handleResponse if step is redirect_to_human_support
             }
 
             if (Object.keys(requestData).length > 0) {
+                const response = await this.sendRequest(requestData);
+                if (response) this.handleResponse(response);
+            }
+        }
+
+        /**
+         * Shows a confirmation message for "Ask another question" with Yes/No options
+         * 
+         * When user clicks "Yes": Sends send_concern_categories step to show category options
+         * When user clicks "No": Sends send_ai_disclaimer step with ratings enabled
+         */
+        showAskAnotherConfirmation() {
+            // Add user message showing "Ask another question"
+            this.addMessage('Ask another question', false);
+            
+            // Add bot confirmation message
+            const confirmationMessage = 'Ask another question?';
+            this.addMessage(confirmationMessage, true);
+            
+            // Create Yes/No options
+            const confirmationOptions = [
+                {
+                    id: 'ask_another_yes',
+                    option_value: 'Yes'
+                },
+                {
+                    id: 'ask_another_no',
+                    option_value: 'No'
+                }
+            ];
+            
+            // Add Yes/No options
+            this.addOptions(confirmationOptions);
+            
+            // Store that we're in confirmation state
+            this.state.askAnotherConfirmation = true;
+        }
+        
+        /**
+         * Handles the Yes/No response for "Ask another question" confirmation
+         * 
+         * @param {string} choice - 'yes' or 'no'
+         */
+        async handleAskAnotherConfirmation(choice) {
+            // Clear confirmation state
+            this.state.askAnotherConfirmation = false;
+            
+            if (choice === 'yes') {
+                // User clicked "Yes" - Send send_concern_categories step
+                const requestData = {
+                    step: 'send_concern_categories',
+                    user_type: this.state.user_type,  // ✅ Preserved (same user)
+                    session_id: this.state.session_id || ''  // ✅ Preserved (same session)
+                    // concern_category: NOT SENT (reset for new question)
+                    // question: NOT SENT (reset for new question)
+                };
+                this.state.currentStep = 'send_concern_categories';
+                
+                const response = await this.sendRequest(requestData);
+                if (response) this.handleResponse(response);
+            } else if (choice === 'no') {
+                // User clicked "No" - Send send_ai_disclaimer step
+                // The backend should return with rating_enabled: true
+                const requestData = {
+                    step: 'send_ai_disclaimer',
+                    session_id: this.state.session_id || '',
+                    user_type: this.state.user_type || '',
+                    concern_category: this.state.concern_category || '',
+                    question: this.state.question || ''
+                };
+                this.state.currentStep = 'send_ai_disclaimer';
+                
                 const response = await this.sendRequest(requestData);
                 if (response) this.handleResponse(response);
             }
@@ -3226,11 +3776,39 @@
         handleResponse(response) {
             // Special handling for starting disclaimer step
             if (response.step === 'send_ai_starting_disclaimer') {
+                console.log('📋 Processing send_ai_starting_disclaimer response:', response);
+                
+                // Clear any loading messages before showing disclaimer
+                this.messagesDiv.innerHTML = '';
+                
+                // Save locale from backend response (after first request, use backend locale)
+                // Always use backend locale if provided (backend should echo back the locale it received)
+                // Only preserve URL locale if backend doesn't return locale at all
+                if (response.locale && response.locale.trim() !== '') {
+                    const previousLocale = this.state.locale;
+                    this.state.locale = response.locale;
+                    console.log('🌍 Locale updated from backend response:', response.locale, '(was:', previousLocale + ')');
+                } else {
+                    // Backend didn't return locale - preserve original URL locale
+                    console.log('🌍 Backend did not return locale, preserving original URL locale:', this.state.locale);
+                }
+                
                 // Show disclaimer with embedded links
                 if (response.message && response.message.trim() !== '') {
                     this.showStartingDisclaimer(response);
                 }
-                // Show "Start Chat" button (already in footer)
+                // Clear footer loading message and show "Start Chat" button only after disclaimer is received
+                console.log('✅ Showing Start Chat button');
+                this.footerDiv.innerHTML = `
+                    <button class="chatbot-lg-start-btn" id="chatbot-lg-start">Start Chat</button>
+                `;
+                const startButton = this.widget.querySelector('#chatbot-lg-start');
+                if (startButton) {
+                    startButton.addEventListener('click', () => this.startChat());
+                    console.log('✅ Start Chat button created and event listener attached');
+                } else {
+                    console.error('❌ Failed to find Start Chat button element');
+                }
                 return; // Don't process as regular message
             }
             
@@ -3240,25 +3818,50 @@
                 this.state.session_id = response.session_id; // Also update state
             }
 
+            // Save locale from backend response (after first request, use backend locale)
+            // First request uses locale from URL, all subsequent requests use locale from backend
+            // Always use backend locale if provided (backend should echo back the locale it received)
+            // Only preserve URL locale if backend doesn't return locale at all
+            if (response.locale && response.locale.trim() !== '') {
+                const previousLocale = this.state.locale;
+                this.state.locale = response.locale;
+                console.log('🌍 Locale updated from backend response:', response.locale, '(was:', previousLocale + ')');
+            } else {
+                // Backend didn't return locale - preserve original URL locale
+                console.log('🌍 Backend did not return locale, preserving original URL locale:', this.state.locale);
+            }
+
             // Use the step name from backend response (matches the switch node branch that processed it)
             if (response.step) {
                 this.state.currentStep = response.step;
             }
 
-            // Check if rating UI should be shown (rating_enabled takes precedence over regular options)
-            // Handle both boolean true and string "true" from backend
-            const isRatingStep = response.rating_enabled === true || response.rating_enabled === 'true';
+            // Check if rating UI should be shown (step name determines this)
+            const isRatingStep = response.step === 'send_rating';
             
             // Store options to attach to the message/answer
-            // If rating is enabled, don't save options as regular options (they're feedback options for rating UI)
+            // If rating step, don't save options as regular options (they're feedback options for rating UI)
             const optionsToStore = (!isRatingStep && response.options && response.options.length > 0) ? response.options : null;
             
             // Display messages and answers exactly as sent from backend (no filtering)
             // Backend is responsible for sending clean, properly formatted messages
-            if (response.message) {
+            if (response.message && response.message.trim() !== '') {
+                // Debug: Log message for send_top_questions step
+                if (response.step === 'send_top_questions') {
+                    console.log('📋 send_top_questions - Message received:', response.message);
+                    console.log('📋 send_top_questions - Message length:', response.message.length);
+                    console.log('📋 send_top_questions - Adding message to UI');
+                }
                 // Store options with the message if they exist (but not if rating is enabled)
                 // Rating UI will be saved separately via updateLastCachedMessageRatingFlag
                 this.addMessage(response.message, true, true, optionsToStore);
+            } else if (response.step === 'send_top_questions') {
+                // Debug: Warn if message is missing or empty for send_top_questions
+                console.warn('⚠️ send_top_questions - No message or empty message in response!', {
+                    hasMessage: !!response.message,
+                    messageValue: response.message,
+                    fullResponse: response
+                });
             }
             if (response.answer) {
                 // Store options with the answer if they exist (and message didn't have them)
@@ -3299,20 +3902,19 @@
                 this.disableTextInput();
             }
 
-            // Add rating UI if backend explicitly enables it (via rating_enabled flag)
-            // When rating_enabled is true, options contains feedback options (not action buttons)
-            // Handle both boolean true and string "true" from backend
-            if (response.rating_enabled === true || response.rating_enabled === 'true') {
+            // Add rating UI if step is send_rating
+            // When step is send_rating, options contains feedback options (not action buttons)
+            if (response.step === 'send_rating') {
                 // Add rating UI under the last bot message with feedback options from backend
                 // Debug: Log what we're receiving
-                console.log('📊 Rating enabled. Feedback options received:', response.options);
-                this.addRatingUI(response.options || []);
+                console.log('📊 Rating step detected. Feedback options received:', response.options);
+                this.addRatingUI(response.options || [], response.rating_message || null);
                 
-                // Update the last cached message to include rating_enabled flag
+                // Update the last cached message to include rating step flag
                 // This allows us to restore rating UI when cache is loaded
-                this.updateLastCachedMessageRatingFlag(true, response.options || []);
+                this.updateLastCachedMessageRatingFlag(true, response.options || [], response.rating_message || null);
             } else {
-                // When rating is not enabled, options are regular action buttons
+                // When not rating step, options are regular action buttons
             if (response.options && response.options.length > 0) {
                 this.addOptions(response.options);
                 }
@@ -3344,7 +3946,7 @@
          * @param {Array} feedbackOptions - Array of feedback option objects from backend
          *                                  Format: [{id: 'perfect', value: 'Chat was perfect'}, ...]
          */
-        addRatingUI(feedbackOptions = []) {
+        addRatingUI(feedbackOptions = [], ratingMessage = null) {
             // Check if rating UI already exists
             if (document.getElementById('chatbot-lg-rating-container')) return;
 
@@ -3359,11 +3961,10 @@
             ratingContainer.id = 'chatbot-lg-rating-container';
             ratingContainer.className = 'chatbot-lg-rating-container';
 
-            // Create stars container
+            // Create stars container (no label above stars)
             const starsContainer = document.createElement('div');
             starsContainer.className = 'chatbot-lg-stars-container';
             starsContainer.innerHTML = `
-                <div class="chatbot-lg-rating-label">Rate your experience:</div>
                 <div class="chatbot-lg-stars" id="chatbot-lg-stars">
                     <span class="chatbot-lg-star" data-rating="1">⭐</span>
                     <span class="chatbot-lg-star" data-rating="2">⭐</span>
@@ -3396,8 +3997,13 @@
             });
             
             if (validFeedbackOptions.length > 0) {
+                // Use ratingMessage from backend if provided, otherwise skip label
+                const feedbackLabelHTML = ratingMessage 
+                    ? `<div class="chatbot-lg-feedback-label">${this.escapeHtml(ratingMessage)}</div>`
+                    : '';
+                
                 feedbackOptionsHTML = `
-                    <div class="chatbot-lg-feedback-label">What can we improve?</div>
+                    ${feedbackLabelHTML}
                     <div class="chatbot-lg-feedback-options" id="chatbot-lg-feedback-options">
                 `;
                 
@@ -3436,7 +4042,7 @@
                 <textarea 
                     id="chatbot-lg-feedback-text" 
                     class="chatbot-lg-feedback-input" 
-                    placeholder="Please describe..."
+                    placeholder=""
                     rows="3"
                     style="display: none; margin-top: 10px;"
                 ></textarea>
@@ -3444,8 +4050,9 @@
                     id="chatbot-lg-submit-rating" 
                     class="chatbot-lg-submit-rating-btn"
                     disabled
+                    title="Submit Rating"
                 >
-                    Submit Rating
+                    ✓
                 </button>
             `;
             
@@ -3630,18 +4237,22 @@
             }
 
             try {
-                // Send rating and feedback to backend
-                // Combine feedback_option and feedback_text into user_feedback
-                // If user selected a predefined option, use that option's text
-                // If user typed custom feedback, use the typed text
+                // Prepare feedback data
+                // feedback_option: the option ID if a radio button was selected (e.g., "perfect", "slow", "unclear", "not_found", "other")
+                // feedback_text: the custom text if "Other" was selected and user typed something
+                // user_feedback: combined feedback text for backward compatibility
+                
+                let feedbackOptionId = feedbackOption || null;
+                let feedbackTextValue = (feedbackText && feedbackText.trim() !== '') ? feedbackText.trim() : '';
                 let userFeedback = '';
-                if (feedbackText && feedbackText.trim() !== '') {
+                
+                if (feedbackTextValue) {
                     // User typed custom feedback (from "Other" option)
-                    userFeedback = feedbackText.trim();
-                } else if (feedbackOption) {
-                    // User selected a predefined feedback option
+                    userFeedback = feedbackTextValue;
+                } else if (feedbackOptionId) {
+                    // User selected a predefined feedback option (not "Other")
                     // Find the option text from the DOM (from the <span> element inside the label)
-                    const radio = document.querySelector(`input[name="feedback-option"][value="${feedbackOption}"]`);
+                    const radio = document.querySelector(`input[name="feedback-option"][value="${feedbackOptionId}"]`);
                     if (radio) {
                         const labelElement = radio.closest('.chatbot-lg-feedback-option');
                         if (labelElement) {
@@ -3657,20 +4268,23 @@
                     }
                     // Fallback: use the option ID if we can't find the text
                     if (!userFeedback) {
-                        userFeedback = feedbackOption;
+                        userFeedback = feedbackOptionId;
                     }
                 }
                 
-                // Send rating and feedback to backend with same data structure as send_ai_disclaimer
+                // Send rating and feedback to backend with all user input
                 // Include all the same fields that are sent on send_ai_disclaimer step
                 const response = await this.sendRequest({
                     step: 'send_ai_disclaimer',
                     session_id: this.state.session_id || '',
                     user_rating: rating,              // Rating (1-5) - user's selected star rating
-                    user_feedback: userFeedback,     // Combined feedback: either selected option text or custom typed text
+                    feedback_option: feedbackOptionId, // Option ID if radio button was selected (e.g., "perfect", "slow", "unclear", "not_found", "other")
+                    feedback_text: feedbackTextValue,  // Custom text if "Other" was selected and user typed something
+                    user_feedback: userFeedback,      // Combined feedback text for backward compatibility
                     user_type: this.state.user_type || '',
                     concern_category: this.state.concern_category || '',
-                    question: this.state.question || ''
+                    question: this.state.question || '',
+                    locale: this.state.locale || ''
                 });
 
                 // Keep rating UI visible after submission (don't hide it)
@@ -3810,16 +4424,51 @@
      *   position: 'bottom-right'
      * });
      */
+    // Expose global API - WordPress compatible
     window.ChatbotLiquidGlass = {
         init: function(config) {
+            // Wait for DOM to be ready before initializing (WordPress footer script compatibility)
+            domReady(function() {
             if (window.chatbotLiquidGlassInstance) {
                 console.warn('ChatbotLiquidGlass: Instance already exists');
                 return;
             }
+                
+                try {
             window.chatbotLiquidGlassInstance = new ChatbotLiquidGlass(config);
+                } catch (error) {
+                    console.error('ChatbotLiquidGlass: Initialization error:', error);
+                    // Don't throw - fail gracefully for WordPress compatibility
+                }
+            });
         }
     };
+    
+    // Auto-initialize if config is provided via data attribute (WordPress compatibility)
+    // This allows WordPress to pass config via script tag: <script src="..." data-webhook-url="..."></script>
+    // If on WordPress and no webhookUrl provided, will auto-use the proxy endpoint
+    domReady(function() {
+        const scripts = document.querySelectorAll('script[src*="chatbot-liquid-glass"]');
+        scripts.forEach(function(script) {
+            const webhookUrl = script.getAttribute('data-webhook-url');
+            
+            // Only auto-initialize if webhookUrl is explicitly provided OR if WordPress is detected
+            if ((webhookUrl || isWordPress()) && !window.chatbotLiquidGlassInstance) {
+                const config = {
+                    webhookUrl: webhookUrl || (isWordPress() ? getWordPressProxyUrl() : null),
+                    position: script.getAttribute('data-position') || 'bottom-right',
+                    title: script.getAttribute('data-title') || 'AI Support',
+                    subtitle: script.getAttribute('data-subtitle') || 'The Digital PO Box'
+                };
+                
+                // Only initialize if we have a valid webhookUrl
+                if (config.webhookUrl) {
+                    window.ChatbotLiquidGlass.init(config);
+                }
+            }
+        });
+    });
 
-})();
+})(window, document);
 
 
