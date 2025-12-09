@@ -2644,7 +2644,8 @@
             // Send request for send_user_types with blank session_id
             this.sendRequest({
                 step: 'send_user_types',
-                session_id: ''  // Blank for new session - backend will generate
+                session_id: '',  // Blank for new session - backend will generate
+                locale: this.state.locale || 'en'
             }).then(response => {
                 if (response) {
                     this.handleResponse(response);
@@ -3491,7 +3492,8 @@
                 requestData = {
                     step: 'send_concern_categories',
                     user_type: option.id,
-                    session_id: this.state.session_id || ''
+                    session_id: this.state.session_id || '',
+                    locale: this.state.locale || 'en'
                 };
                 this.state.user_type = option.id;
                 this.state.currentStep = 'send_concern_categories';
@@ -3503,7 +3505,8 @@
                         step: 'send_top_questions',
                         user_type: this.state.user_type,
                         concern_category: option.id,
-                        session_id: this.state.session_id || ''
+                        session_id: this.state.session_id || '',
+                        locale: this.state.locale || 'en'
                     };
                     this.state.concern_category = option.id;
                     this.state.currentStep = 'send_top_questions';
@@ -3516,7 +3519,8 @@
                         step: 'send_top_questions',
                         user_type: this.state.user_type,
                         concern_category: 'something_else',
-                        session_id: this.state.session_id || ''
+                        session_id: this.state.session_id || '',
+                        locale: this.state.locale || 'en'
                     };
                     this.state.concern_category = 'something_else';
                     this.state.question = '';
@@ -3530,7 +3534,8 @@
                             user_type: this.state.user_type,
                             concern_category: this.state.concern_category,
                             question: option.option_value,
-                            session_id: this.state.session_id || ''
+                            session_id: this.state.session_id || '',
+                            locale: this.state.locale || 'en'
                         };
                         this.state.question = option.option_value;
                         this.state.currentStep = option.next_step;
@@ -3541,7 +3546,8 @@
                         user_type: this.state.user_type,
                         concern_category: this.state.concern_category,
                         question: option.option_value,
-                        session_id: this.state.session_id || ''
+                        session_id: this.state.session_id || '',
+                        locale: this.state.locale || 'en'
                     };
                     this.state.question = option.option_value;
                     this.state.currentStep = 'send_query_answer';
@@ -3559,7 +3565,8 @@
                     requestData = {
                         step: nextStep,
                         user_type: this.state.user_type,
-                        session_id: this.state.session_id || ''
+                        session_id: this.state.session_id || '',
+                        locale: this.state.locale || 'en'
                         // Don't send concern_category or question (reset for new question)
                     };
                     this.state.currentStep = nextStep;
@@ -3570,7 +3577,8 @@
                         user_type: this.state.user_type,
                         concern_category: this.state.concern_category || '',
                         question: this.state.question || '',
-                        session_id: this.state.session_id || ''
+                        session_id: this.state.session_id || '',
+                        locale: this.state.locale || 'en'
                     };
                     this.state.currentStep = nextStep;
                 } else if (nextStep === 'send_rating') {
@@ -3580,7 +3588,8 @@
                         user_type: this.state.user_type,
                         concern_category: this.state.concern_category || '',
                         question: this.state.question || '',
-                        session_id: this.state.session_id || ''
+                        session_id: this.state.session_id || '',
+                        locale: this.state.locale || 'en'
                         // rating_enabled is determined by backend from database
                     };
                     this.state.currentStep = nextStep;
@@ -3591,7 +3600,8 @@
                         user_type: this.state.user_type,
                         concern_category: this.state.concern_category || '',
                         question: this.state.question || '',
-                        session_id: this.state.session_id || ''
+                        session_id: this.state.session_id || '',
+                        locale: this.state.locale || 'en'
                     };
                     this.state.currentStep = nextStep;
                 }
@@ -3607,7 +3617,8 @@
                     requestData = {
                         step: nextStep,
                         user_type: this.state.user_type,
-                        session_id: this.state.session_id || ''
+                        session_id: this.state.session_id || '',
+                        locale: this.state.locale || 'en'
                         // Don't send concern_category or question (reset for new question)
                     };
                     this.state.currentStep = nextStep;
@@ -3618,7 +3629,8 @@
                         user_type: this.state.user_type,
                         concern_category: this.state.concern_category || '',
                         question: this.state.question || '',
-                        session_id: this.state.session_id || ''
+                        session_id: this.state.session_id || '',
+                        locale: this.state.locale || 'en'
                     };
                     this.state.currentStep = nextStep;
                 } else {
@@ -3628,7 +3640,8 @@
                         user_type: this.state.user_type,
                         concern_category: this.state.concern_category || '',
                         question: this.state.question || '',
-                        session_id: this.state.session_id || ''
+                        session_id: this.state.session_id || '',
+                        locale: this.state.locale || 'en'
                     };
                     this.state.currentStep = nextStep;
                 }
@@ -3687,7 +3700,8 @@
                 const requestData = {
                     step: 'send_concern_categories',
                     user_type: this.state.user_type,  // ✅ Preserved (same user)
-                    session_id: this.state.session_id || ''  // ✅ Preserved (same session)
+                    session_id: this.state.session_id || '',  // ✅ Preserved (same session)
+                    locale: this.state.locale || 'en'
                     // concern_category: NOT SENT (reset for new question)
                     // question: NOT SENT (reset for new question)
                 };
@@ -3703,7 +3717,8 @@
                     session_id: this.state.session_id || '',
                     user_type: this.state.user_type || '',
                     concern_category: this.state.concern_category || '',
-                    question: this.state.question || ''
+                    question: this.state.question || '',
+                    locale: this.state.locale || 'en'
                 };
                 this.state.currentStep = 'send_ai_disclaimer';
                 
@@ -3738,7 +3753,8 @@
                 user_type: this.state.user_type,
                 concern_category: this.state.concern_category,
                 question: question,
-                session_id: this.state.session_id || ''
+                session_id: this.state.session_id || '',
+                locale: this.state.locale || 'en'
             });
 
             if (response) {
@@ -4284,7 +4300,7 @@
                     user_type: this.state.user_type || '',
                     concern_category: this.state.concern_category || '',
                     question: this.state.question || '',
-                    locale: this.state.locale || ''
+                    locale: this.state.locale || 'en'
                 });
 
                 // Keep rating UI visible after submission (don't hide it)
