@@ -311,15 +311,12 @@
                 const searchParams = new URLSearchParams(window.location.search);
                 
                 // 1. Check path-based locale (e.g., /en/page, /fr/page)
-                // WordPress often uses 2-letter language codes in the path
+                // Extract any 2-letter code immediately after the domain: /XX/
                 const pathMatch = pathname.match(/^\/([a-z]{2})(?:\/|$)/i);
                 if (pathMatch) {
                     const locale = pathMatch[1].toLowerCase();
-                    // Common language codes
-                    const validLocales = ['en', 'fr', 'de', 'es', 'it', 'pt', 'nl', 'pl', 'ru', 'ja', 'zh', 'ar', 'hi', 'ko'];
-                    if (validLocales.includes(locale)) {
-                        return locale;
-                    }
+                    // Return any 2-letter code found - no hardcoded validation
+                    return locale;
                 }
                 
                 // 2. Check query parameters (e.g., ?lang=en, ?locale=fr)
@@ -337,10 +334,8 @@
                 const subdomainMatch = hostname.match(/^([a-z]{2})\./i);
                 if (subdomainMatch) {
                     const locale = subdomainMatch[1].toLowerCase();
-                    const validLocales = ['en', 'fr', 'de', 'es', 'it', 'pt', 'nl', 'pl', 'ru', 'ja', 'zh', 'ar', 'hi', 'ko'];
-                    if (validLocales.includes(locale)) {
-                        return locale;
-                    }
+                    // Return any 2-letter code found - no hardcoded validation
+                    return locale;
                 }
                 
                 // 4. Check HTML lang attribute
@@ -2254,138 +2249,78 @@
             this.toggle.style.display = 'none';
             this.isOpen = true;
             
-            // Extract locale from URL ONCE when chat icon is clicked
-            // This locale will be used for ALL subsequent steps, even if URL changes
-            if (!this.state.locale || this.state.locale.trim() === '') {
-                this.state.locale = this.getLocaleFromURL() || '';
+            // Hide notification badge when widget is opened
+            if (this.badge) {
+                this.badge.style.display = 'none';
             }
+            
+            // CRITICAL: Extract locale IMMEDIATELY when chat icon is clicked
+            // This ensures locale is available before any request is made
+            const extractedLocale = this.getLocaleFromURL();
+            this.state.locale = extractedLocale || '';
             
             // Ensure locale is always a string
             if (typeof this.state.locale !== 'string') {
                 this.state.locale = String(this.state.locale || '');
             }
             
-            // Hide notification badge when widget is opened
-            if (this.badge) {
-                this.badge.style.display = 'none';
+            // Log locale extraction for debugging
+            console.log('🔍 Chat icon clicked - Locale extracted:', this.state.locale, '| URL:', window.location.href);
+            
+            // CRITICAL: Clear footer IMMEDIATELY to prevent any button from showing
+            if (this.footerDiv) {
+                this.footerDiv.innerHTML = '';
             }
             
-            // Check if we have cached messages and restore them automatically
-            const savedSessionId = this.getSessionId();
-            const cachedMessages = this.getCachedMessages();
-            const hasCachedMessages = savedSessionId && cachedMessages.length > 0;
-            
-            // Only auto-restore if widget is empty (no messages displayed yet)
-            if (hasCachedMessages && this.messagesDiv.children.length === 0) {
-                this.restoreMessagesFromCache();
-                
-                // Set up UI based on restored state
-                // Check if we're at the AI disclaimer step - if so, show "Start Over" button
-                if (this.state.currentStep === 'send_ai_disclaimer') {
-                    this.showStartOverButton();
-                } else {
-                    // Check if disclaimer exists in restored messages
-                    const hasDisclaimer = this.messagesDiv.querySelector('.chatbot-lg-starting-disclaimer') !== null ||
-                                         cachedMessages.some(msg => msg.step === 'send_ai_starting_disclaimer');
-                    
-                    if (hasDisclaimer && this.state.currentStep === 'send_user_types') {
-                        // Disclaimer is shown and we're at the start - show Start Chat button
-                        this.footerDiv.innerHTML = `
-                            <button class="chatbot-lg-start-btn" id="chatbot-lg-start">Start Chat</button>
-                        `;
-                        this.widget.querySelector('#chatbot-lg-start').addEventListener('click', () => this.startChat());
-                    } else {
-                        // No disclaimer or conversation already started - clear footer
-                        this.footerDiv.innerHTML = '';
-                    }
-                    
-                    // Enable appropriate UI elements based on restored step and state
-                    const shouldEnableInput = (this.state.currentStep === 'send_top_questions' && 
-                                              this.state.concern_category === 'something_else') ||
-                                             (this.state.currentStep === 'send_query_answer');
-                    
-                    if (shouldEnableInput) {
-                        this.enableTextInput();
-                    } else {
-                        this.disableTextInput();
-                    }
-                }
-                
-                // Scroll to bottom to show latest messages
-                this.scrollToBottom();
-            } else if (this.messagesDiv.children.length === 0) {
+            // CRITICAL: Always fetch fresh disclaimer on first click to ensure locale is sent
+            // Do NOT restore from cache - always fetch fresh to get correct locale
+            if (this.messagesDiv.children.length === 0) {
                 // Widget is empty - check if disclaimer has already been fetched
                 // CRITICAL: Check DOM for disclaimer element (not just state)
                 const hasDisclaimerInDom = this.messagesDiv.querySelector('.chatbot-lg-starting-disclaimer') !== null;
                 const hasSessionId = this.state.session_id && this.state.session_id.trim() !== '';
                 
-                // CRITICAL: On first click, always fetch disclaimer if:
-                // 1. No disclaimer in DOM (even if session_id exists - might be stale)
-                // 2. No session_id
-                // This ensures fresh disclaimer is fetched even if sessionStorage has stale data
-                if (!hasDisclaimerInDom) {
-                    // CRITICAL: Clear footer FIRST to ensure no button is visible
+                // CRITICAL: Always fetch fresh disclaimer on first click to ensure locale is sent
+                // Even if disclaimer exists in DOM, we need to send locale to backend
+                // Clear footer FIRST to ensure no button is visible
+                if (this.footerDiv) {
+                    this.footerDiv.innerHTML = '';
+                }
+                
+                // Clear messagesDiv to ensure clean state
+                if (this.messagesDiv) {
+                    this.messagesDiv.innerHTML = '';
+                }
+                
+                // Clear any stale session/cache to force fresh fetch
+                if (hasSessionId) {
+                    this.clearSession();
+                    this.clearMessageCache();
+                }
+                
+                // CRITICAL: Show typing indicator IMMEDIATELY and force visibility
+                this.removeTypingIndicator();
+                this.addTypingIndicator();
+                
+                // Force DOM reflow to ensure typing indicator is visible
+                void this.messagesDiv.offsetHeight;
+                this.scrollToBottom();
+                
+                // Small delay to ensure typing indicator is rendered and visible
+                await new Promise(resolve => setTimeout(resolve, 150));
+                
+                // Fetch starting disclaimer from backend
+                // DO NOT show button here - it will be shown in handleResponse() after response is received
+                try {
+                    await this.fetchStartingDisclaimer();
+                } catch (error) {
+                    console.error('❌ Error in fetchStartingDisclaimer:', error);
+                    this.removeTypingIndicator();
                     if (this.footerDiv) {
-                        this.footerDiv.innerHTML = '';
+                        this.footerDiv.innerHTML = '<div style="text-align: center; color: #ff3d3d; padding: 8px; font-size: 13px;">Failed to load. Please try again.</div>';
                     }
-                    
-                    // CRITICAL: Clear messagesDiv to ensure clean state
                     if (this.messagesDiv) {
-                        this.messagesDiv.innerHTML = '';
-                    }
-                    
-                    // Clear any stale session_id if disclaimer doesn't exist in DOM
-                    if (hasSessionId && !hasDisclaimerInDom) {
-                        this.clearSession();
-                        this.clearMessageCache();
-                    }
-                    
-                    // Show typing indicator before making the request
-                    this.addTypingIndicator();
-                    this.scrollToBottom();
-                    
-                    // Small delay to ensure typing indicator is rendered
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                    
-                    // Fetch starting disclaimer from backend
-                    // Locale is already extracted above and will be included in the request
-                    // DO NOT show button here - it will be shown in handleResponse() after response is received
-                    try {
-                        await this.fetchStartingDisclaimer();
-                    } catch (error) {
-                        console.error('❌ Error in fetchStartingDisclaimer:', error);
-                        this.removeTypingIndicator();
-                        if (this.footerDiv) {
-                            this.footerDiv.innerHTML = '<div style="text-align: center; color: #ff3d3d; padding: 8px; font-size: 13px;">Failed to load. Please try again.</div>';
-                        }
-                        if (this.messagesDiv) {
-                            this.messagesDiv.innerHTML = '<div class="chatbot-lg-message chatbot-lg-bot-message"><div class="chatbot-lg-message-bubble" style="color: #ff3d3d;">Unable to connect. Please refresh and try again.</div></div>';
-                        }
-                    }
-                } else if (hasDisclaimerInDom && hasSessionId) {
-                    // Both disclaimer in DOM and session_id exist - this is a restored state
-                    // Show Start Chat button only if we're at the beginning
-                    if (this.state.currentStep === 'send_user_types' || !this.state.currentStep) {
-                        if (this.footerDiv) {
-                            this.footerDiv.innerHTML = `
-                                <button class="chatbot-lg-start-btn" id="chatbot-lg-start">Start Chat</button>
-                            `;
-                            const startButton = this.widget.querySelector('#chatbot-lg-start');
-                            if (startButton) {
-                                startButton.addEventListener('click', () => this.startChat());
-                            }
-                        }
-                    }
-                } else if (hasDisclaimerInDom && !hasSessionId) {
-                    // Disclaimer exists but no session_id - show Start Chat button
-                    if (this.footerDiv) {
-                        this.footerDiv.innerHTML = `
-                            <button class="chatbot-lg-start-btn" id="chatbot-lg-start">Start Chat</button>
-                        `;
-                        const startButton = this.widget.querySelector('#chatbot-lg-start');
-                        if (startButton) {
-                            startButton.addEventListener('click', () => this.startChat());
-                        }
+                        this.messagesDiv.innerHTML = '<div class="chatbot-lg-message chatbot-lg-bot-message"><div class="chatbot-lg-message-bubble" style="color: #ff3d3d;">Unable to connect. Please refresh and try again.</div></div>';
                     }
                 }
             }
@@ -2451,13 +2386,32 @@
                 // Force scroll to show typing indicator
                 this.scrollToBottom();
                 
-                // Build request body with locale from state
+                // CRITICAL: Use locale from state (already extracted in open() method)
+                // If for some reason state.locale is empty, extract again as fallback
+                if (!this.state.locale || this.state.locale.trim() === '') {
+                    const extractedLocale = this.getLocaleFromURL();
+                    this.state.locale = extractedLocale || '';
+                    console.log('⚠️ Locale was empty, re-extracted:', this.state.locale);
+                }
+                
+                // Ensure locale is always a string
+                if (typeof this.state.locale !== 'string') {
+                    this.state.locale = String(this.state.locale || '');
+                }
+                
+                // Build request body with locale - ALWAYS include it, even if empty
                 const locale = (this.state.locale || '').trim();
                 const requestBody = {
                     step: 'send_ai_starting_disclaimer',
                     session_id: '',
                     locale: locale
                 };
+                
+                // CRITICAL: Verify locale is in request body before sending
+                console.log('🚀 Sending send_ai_starting_disclaimer');
+                console.log('   Request body:', JSON.stringify(requestBody, null, 2));
+                console.log('   Locale value:', locale, '(type:', typeof locale, ', length:', locale.length, ')');
+                console.log('   Current URL:', window.location.href);
                 
                 const requestBodyString = JSON.stringify(requestBody);
                 
@@ -3326,6 +3280,8 @@
             typing.id = 'chatbot-lg-typing';
             typing.className = 'chatbot-lg-message bot';
             typing.style.display = 'flex';
+            typing.style.visibility = 'visible';
+            typing.style.opacity = '1';
             typing.innerHTML = `
                 <div class="chatbot-lg-message-avatar" style="background: rgba(0, 61, 70, 0.85);">🤖</div>
                 <div class="chatbot-lg-message-bubble">
@@ -3338,6 +3294,10 @@
             `;
             
             this.messagesDiv.appendChild(typing);
+            
+            // Force DOM reflow to ensure typing indicator is rendered
+            void typing.offsetHeight;
+            
             this.scrollToBottom();
         }
 
@@ -3965,6 +3925,11 @@
                 this.removeTypingIndicator();
                 this.messagesDiv.innerHTML = '';
                 
+                // CRITICAL: Ensure footer is empty - button should NOT be visible yet
+                if (this.footerDiv) {
+                    this.footerDiv.innerHTML = '';
+                }
+                
                 // Update locale from backend response if provided
                 if (response.locale && response.locale.trim() !== '') {
                     this.state.locale = response.locale;
@@ -3973,16 +3938,33 @@
                 // Show disclaimer with embedded links
                 if (response.message && response.message.trim() !== '') {
                     this.showStartingDisclaimer(response);
-                }
-                
-                // Show "Start Chat" button after response is received
-                if (this.footerDiv) {
-                    this.footerDiv.innerHTML = `
-                        <button class="chatbot-lg-start-btn" id="chatbot-lg-start">Start Chat</button>
-                    `;
-                    const startButton = this.widget.querySelector('#chatbot-lg-start');
-                    if (startButton) {
-                        startButton.addEventListener('click', () => this.startChat());
+                    
+                    // CRITICAL: Verify disclaimer is actually in DOM before showing button
+                    // Use setTimeout to ensure DOM has been updated
+                    setTimeout(() => {
+                        const disclaimerInDom = this.messagesDiv.querySelector('.chatbot-lg-starting-disclaimer');
+                        
+                        // Only show button if disclaimer is confirmed to be in DOM
+                        if (disclaimerInDom && this.footerDiv) {
+                            this.footerDiv.innerHTML = `
+                                <button class="chatbot-lg-start-btn" id="chatbot-lg-start">Start Chat</button>
+                            `;
+                            const startButton = this.widget.querySelector('#chatbot-lg-start');
+                            if (startButton) {
+                                startButton.addEventListener('click', () => this.startChat());
+                            }
+                        } else {
+                            // Disclaimer not found in DOM - don't show button
+                            console.warn('⚠️ Disclaimer not found in DOM, button not shown');
+                            if (this.footerDiv) {
+                                this.footerDiv.innerHTML = '<div style="text-align: center; color: #ff3d3d; padding: 8px; font-size: 13px;">Error: Disclaimer not loaded. Please refresh.</div>';
+                            }
+                        }
+                    }, 50); // Small delay to ensure DOM is updated
+                } else {
+                    // No message in response - don't show button
+                    if (this.footerDiv) {
+                        this.footerDiv.innerHTML = '<div style="text-align: center; color: #ff3d3d; padding: 8px; font-size: 13px;">Error: No message received. Please try again.</div>';
                     }
                 }
                 return;
@@ -4184,7 +4166,7 @@
                 <textarea 
                     id="chatbot-lg-feedback-text" 
                     class="chatbot-lg-feedback-input" 
-                    placeholder=""
+                    placeholder="Please provide your feedback (required)"
                     rows="3"
                     style="display: none; margin-top: 10px;"
                 ></textarea>
@@ -4227,7 +4209,7 @@
                 star.addEventListener('click', () => {
                     selectedRating = index + 1;
                     this.updateStarDisplay(selectedRating);
-                    this.checkRatingSubmitEnabled(selectedRating, selectedFeedbackOption, submitBtn);
+                    this.checkRatingSubmitEnabled(selectedRating, selectedFeedbackOption, submitBtn, feedbackTextInput);
                 });
 
                 star.addEventListener('mouseenter', () => {
@@ -4253,15 +4235,26 @@
                     // Show/hide text input based on "Other" selection
                     if (isOther && feedbackTextInput) {
                         feedbackTextInput.style.display = 'block';
+                        feedbackTextInput.required = true;
+                        feedbackTextInput.placeholder = 'Please provide your feedback (required)';
                         feedbackTextInput.focus();
                     } else if (feedbackTextInput) {
                         feedbackTextInput.style.display = 'none';
                         feedbackTextInput.value = '';
+                        feedbackTextInput.required = false;
+                        feedbackTextInput.placeholder = 'Please provide your feedback (required)';
                     }
                     
-                    this.checkRatingSubmitEnabled(selectedRating, selectedFeedbackOption, submitBtn);
+                    this.checkRatingSubmitEnabled(selectedRating, selectedFeedbackOption, submitBtn, feedbackTextInput);
                 });
             });
+
+            // Text input handler - re-validate when user types (for "Other" option)
+            if (feedbackTextInput) {
+                feedbackTextInput.addEventListener('input', () => {
+                    this.checkRatingSubmitEnabled(selectedRating, selectedFeedbackOption, submitBtn, feedbackTextInput);
+                });
+            }
 
             // Submit button handler
             if (submitBtn) {
@@ -4270,6 +4263,21 @@
                         const feedbackText = feedbackTextInput && feedbackTextInput.style.display !== 'none' 
                             ? feedbackTextInput.value.trim() 
                             : '';
+                        
+                        // Validate: If "Other" is selected, text input is required
+                        const isOtherSelected = selectedFeedbackOption && 
+                            document.querySelector(`input[name="feedback-option"][value="${selectedFeedbackOption}"]`)?.dataset.isOther === 'true';
+                        
+                        if (isOtherSelected && !feedbackText) {
+                            // Show validation message
+                            if (feedbackTextInput) {
+                                feedbackTextInput.style.borderColor = '#ff3d3d';
+                                feedbackTextInput.placeholder = 'Please provide feedback (required)';
+                                feedbackTextInput.focus();
+                            }
+                            return; // Don't submit
+                        }
+                        
                         this.submitRating(selectedRating, selectedFeedbackOption, feedbackText);
                     }
                 });
@@ -4282,13 +4290,37 @@
          * @param {number} rating - Selected rating (0-5)
          * @param {string|null} feedbackOption - Selected feedback option ID
          * @param {HTMLElement} submitBtn - Submit button element
+         * @param {HTMLElement} feedbackTextInput - Feedback text input element (optional)
          */
-        checkRatingSubmitEnabled(rating, feedbackOption, submitBtn) {
+        checkRatingSubmitEnabled(rating, feedbackOption, submitBtn, feedbackTextInput = null) {
             if (!submitBtn) return;
             
-            // Enable submit if rating is selected
-            // Feedback option is optional (user can skip it)
-            submitBtn.disabled = rating === 0;
+            // Rating is required
+            if (rating === 0) {
+                submitBtn.disabled = true;
+                return;
+            }
+            
+            // If "Other" is selected, text input is required
+            if (feedbackOption && feedbackTextInput) {
+                const isOtherSelected = document.querySelector(`input[name="feedback-option"][value="${feedbackOption}"]`)?.dataset.isOther === 'true';
+                
+                if (isOtherSelected) {
+                    const hasText = feedbackTextInput.value.trim().length > 0;
+                    submitBtn.disabled = !hasText;
+                    
+                    // Update input border color based on validation
+                    if (hasText) {
+                        feedbackTextInput.style.borderColor = '';
+                    } else {
+                        feedbackTextInput.style.borderColor = '#ff3d3d';
+                    }
+                    return;
+                }
+            }
+            
+            // For non-"Other" options, rating alone is sufficient
+            submitBtn.disabled = false;
         }
 
         /**
